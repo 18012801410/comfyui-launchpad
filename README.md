@@ -47,39 +47,32 @@ bash /root/launchpad/supervisor.sh logs    # 看面板日志
 bash scripts/uninstall.sh                  # 卸载（保留数据盘上的模型/输出/工作流）
 ```
 
-## 方式二：源码直装（当前未发布 Release 时，现在就能用）
+## 方式二：源码一键部署（当前未发布 Release 时，推荐）
 
-原理：把本仓库（含构建好的前端）上传到实例，用 `LAUNCHPAD_SOURCE` 模式安装，后续自启/管理方式和方式一完全一致。
-
-**第 1 步 —— 开发机构建前端**（AutoDL 容器没有 Node.js，dist 要在本地构建好一起上传）：
+在**开发机**（本仓库目录，Git Bash/WSL）执行一条命令，自动完成：构建前端 → 打包 → 上传 → 实例内安装（装依赖/生成令牌/bashrc 自启/启动面板）→ 注册实例已有 ComfyUI：
 
 ```bash
-cd frontend
-npm install
-npm run build        # 产出 frontend/dist
+bash scripts/deploy_autodl.sh <SSH端口> <用户@主机> [ComfyUI路径]
+
+# 真实例子（SSH 信息在 AutoDL 控制台复制）：
+bash scripts/deploy_autodl.sh 38888 root@connect.westc.gpuhub.com /root/ComfyUI
 ```
 
-**第 2 步 —— 上传仓库到实例**。两种任选：
+脚本结束时会**打印访问令牌（只显示一次，立即保存）**，然后：AutoDL 控制台 →「自定义服务」→ 复制 6006 端口映射链接 → 浏览器打开 → 输入令牌。
 
-```bash
-# A. scp 整个目录（替换成你的实例 SSH 信息，AutoDL 控制台可查）
-scp -rP <端口> ./comfyui-setup-package root@<实例地址>:/root/launchpad-src
+<details>
+<summary>手动分步方式（一键脚本不适合时的等价流程）</summary>
 
-# B. 或推到你的 GitHub 私有仓库后，在实例里克隆（走学术加速更快）
-source /etc/network_turbo
-git clone https://github.com/<YOUR_REPO>.git /root/launchpad-src
-```
+1. 开发机构建前端：`cd frontend && npm install && npm run build`
+2. 上传仓库到实例（scp 目录，或推 GitHub 后实例内克隆，记得 `source /etc/network_turbo` 加速）
+3. 实例内执行：`LAUNCHPAD_SOURCE=<仓库路径> bash scripts/install.sh`
+4. 注册已有 ComfyUI：
+   ```bash
+   D=/root/autodl-tmp/launchpad-data/versions
+   ln -s /root/ComfyUI "$D/comfyui-app" && ln -sfn "$D/comfyui-app" "$D/current"
+   ```
 
-**第 3 步 —— 实例内执行源码直装**：
-
-```bash
-cd /root/launchpad-src
-LAUNCHPAD_SOURCE=/root/launchpad-src bash scripts/install.sh
-```
-
-脚本会：环境自检 → 复制源码到 `/root/launchpad/` → 建运行 venv 装依赖（自动走学术加速）→ 生成访问令牌 → 写 bashrc 自启 → 启动面板 → **打印访问地址与令牌**。
-
-**第 4 步 —— 打开面板**：AutoDL 控制台 →「自定义服务」→ 复制 6006 端口的映射链接，浏览器打开，输入第 3 步打印的令牌。
+</details>
 
 ## 让面板管住你的 ComfyUI
 

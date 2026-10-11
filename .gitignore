@@ -20,3 +20,5 @@ frontend/dist/
 # 运行期数据（不入库）
 *.log
 state/
+# 部署上传包
+launchpad-upload.tar.gz

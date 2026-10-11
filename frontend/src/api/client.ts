@@ -80,6 +80,7 @@ export interface ComfyStatus {
 
 export interface LaunchConfig {
   listen_port: number;
+  listen_host: "127.0.0.1" | "0.0.0.0";
   preset: "default" | "low_vram" | "fp16_fast" | "custom";
   extra_args: string;
   academic_accel: boolean;

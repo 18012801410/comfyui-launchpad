@@ -202,6 +202,16 @@ class ProcessSupervisor:
             raise AppError(
                 "conflict_process_running", "ComfyUI 已在运行或启动中", status=409
             )
+        # stopping 期间禁止 spawn：等旧进程完全退出（否则 pid 文件互相覆盖、端口竞争）
+        wait_deadline = time.monotonic() + self._stop_timeout + 5
+        while self._state == ProcessState.STOPPING:
+            if time.monotonic() > wait_deadline:
+                raise AppError("internal", "上一停止流程超时未完成", status=500)
+            await asyncio.sleep(0.05)
+        if self._state in (ProcessState.STARTING, ProcessState.RUNNING):
+            raise AppError(
+                "conflict_process_running", "ComfyUI 已在运行或启动中", status=409
+            )
         if not workdir.is_dir() or not (workdir / "main.py").is_file():
             raise AppError(
                 "version_not_installed", "尚未安装任何 ComfyUI 版本（current 无效）", status=404

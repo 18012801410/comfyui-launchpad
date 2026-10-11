@@ -35,10 +35,23 @@ def test_start_without_version_404(client: TestClient, token: str) -> None:
 
 
 def test_start_port_conflict(client: TestClient, token: str, layout) -> None:
+    import socket as _socket
+
     _make_fake_version(layout)
-    # 占住 LaunchConfig 默认端口 8188
+    # 把启动端口配置为随机空闲端口，再占住它
+    with _socket.socket() as tmp:
+        tmp.bind(("127.0.0.1", 0))
+        free = int(tmp.getsockname()[1])
+    assert (
+        client.put(
+            "/api/comfy/launch-config",
+            json={"listen_port": free},
+            headers=auth_header(token),
+        ).status_code
+        == 200
+    )
     blocker = socket.socket()
-    blocker.bind(("127.0.0.1", 8188))
+    blocker.bind(("127.0.0.1", free))
     blocker.listen(1)
     try:
         resp = client.post("/api/comfy/start", headers=auth_header(token))

@@ -426,6 +426,19 @@ def resolve_current_version(layout: Layout) -> str | None:
     target = Path(os.path.realpath(link))
     if not target.is_dir() or not (target / "main.py").is_file():
         return None
+    # junction 链会穿透到真实路径（如 Desktop 安装目录），优先取 versions/ 下的版本目录名
+    if layout.versions_dir.is_dir():
+        for child in sorted(layout.versions_dir.iterdir()):
+            if child.name == "current" or child.name.startswith("."):
+                continue
+            try:
+                if (
+                    Path(os.path.realpath(child)) == target
+                    and (child / "main.py").is_file()
+                ):
+                    return child.name
+            except OSError:
+                continue
     return target.name
 
 
@@ -440,11 +453,14 @@ def resolve_current_dir(layout: Layout) -> Path | None:
 
 
 def python_exe_for(version_dir: Path) -> Path:
-    """版本内独立 venv 的解释器；缺失回退面板自身解释器。"""
+    """版本内独立 venv 解释器；兼容 venv/.venv（Desktop 约定），缺失回退面板解释器。"""
     sub = "Scripts" if sys.platform == "win32" else "bin"
     exe = "python.exe" if sys.platform == "win32" else "python"
-    candidate = version_dir / "venv" / sub / exe
-    return candidate if candidate.is_file() else Path(sys.executable)
+    for name in ("venv", ".venv"):
+        candidate = version_dir / name / sub / exe
+        if candidate.is_file():
+            return candidate
+    return Path(sys.executable)
 
 
 def safe_version_dir(layout: Layout, version: str) -> Path:

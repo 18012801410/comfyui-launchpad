@@ -190,6 +190,20 @@ async def test_no_orphan_after_stop(supervisor: ProcessSupervisor, workdir: Path
     assert not process_alive(pid), "停止后子进程仍存活（孤儿进程）"
 
 
+async def test_start_during_stopping_waits(
+    supervisor: ProcessSupervisor, workdir: Path
+) -> None:
+    """启动撞上停止进行中：必须等待旧进程完全退出后再 spawn，不得穿透。"""
+    await supervisor.start(fake_cmd(free_port(), hold=10), workdir, "0.39.0")
+    stop_task = asyncio.create_task(supervisor.stop())
+    await asyncio.sleep(0.05)  # 让 stop 先进入 stopping 态
+    snap = await supervisor.start(fake_cmd(free_port(), hold=5), workdir, "0.39.0")
+    await stop_task
+    assert supervisor.state == ProcessState.RUNNING
+    assert snap.pid is not None
+    await supervisor.stop()
+
+
 async def test_restart_from_running(supervisor: ProcessSupervisor, workdir: Path) -> None:
     await supervisor.start(fake_cmd(free_port(), hold=30), workdir, "0.39.0")
     first_pid = supervisor.snapshot().pid

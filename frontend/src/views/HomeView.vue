@@ -126,6 +126,7 @@ async function saveCfg(): Promise<void> {
   try {
     const saved = await api.saveLaunchConfig({
       listen_port: cfg.value.listen_port,
+      listen_host: cfg.value.listen_host,
       preset: cfg.value.preset,
       extra_args: cfg.value.extra_args,
       academic_accel: cfg.value.academic_accel,
@@ -357,9 +358,25 @@ function fmtMb(v: number | null): string {
               ]"
             />
           </n-form-item>
-          <n-form-item label="监听端口（本机）">
+          <n-form-item label="监听端口">
             <n-input-number v-model:value="cfg.listen_port" :min="1024" :max="65535" style="width: 100%" />
           </n-form-item>
+          <n-form-item label="监听地址">
+            <n-radio-group v-model:value="cfg.listen_host">
+              <n-radio value="127.0.0.1">仅本机（127.0.0.1）</n-radio>
+              <n-radio value="0.0.0.0">对外暴露（0.0.0.0）</n-radio>
+            </n-radio-group>
+          </n-form-item>
+          <n-alert
+            v-if="cfg.listen_host === '0.0.0.0'"
+            type="warning"
+            :show-icon="false"
+            style="margin-bottom: 12px"
+          >
+            <b>ComfyUI 没有内置鉴权</b>：对外暴露后，拿到公网 URL 的任何人都能用你的 GPU 生成图片、读取输出目录。
+            外部 API 基址 = AutoDL 控制台中该端口（如 6008）映射的 https 域名；URL 请务必保密。
+            更安全的做法是等面板提供鉴权网关后再对外。
+          </n-alert>
           <n-form-item label="额外启动参数">
             <n-input
               v-model:value="cfg.extra_args"

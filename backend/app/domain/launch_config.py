@@ -10,6 +10,7 @@ import re
 import shlex
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -37,6 +38,8 @@ PRESET_ARGS: dict[Preset, list[str]] = {
 
 class LaunchConfig(BaseModel):
     listen_port: int = 8188
+    # 127.0.0.1=仅本机（面板打开用）；0.0.0.0=对外暴露（AutoDL 6008 映射，无鉴权）
+    listen_host: Literal["127.0.0.1", "0.0.0.0"] = "127.0.0.1"
     preset: Preset = Preset.DEFAULT
     extra_args: str = ""
     academic_accel: bool = False
@@ -70,7 +73,7 @@ class LaunchConfig(BaseModel):
                 "invalid_launch_args",
                 f"ComfyUI 端口不得与面板端口相同（{panel_port}）",
             )
-        args = ["--listen", "127.0.0.1", "--port", str(self.listen_port)]
+        args = ["--listen", self.listen_host, "--port", str(self.listen_port)]
         args.extend(PRESET_ARGS.get(self.preset, []))
         if self.extra_args:
             args.extend(shlex.split(self.extra_args, posix=False))

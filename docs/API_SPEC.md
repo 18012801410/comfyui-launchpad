@@ -53,11 +53,12 @@
 方法/路径：GET `/api/comfy/launch-config`｜PUT 同路径
 请求（PUT）：
 ```json
-{"listen_port":8188,"preset":"low_vram","extra_args":"--disable-auto-launch",
+{"listen_port":8188,"listen_host":"127.0.0.1","preset":"low_vram","extra_args":"--disable-auto-launch",
  "academic_accel":true}
 ```
+`listen_host`：`127.0.0.1`（默认，仅本机）｜`0.0.0.0`（对外暴露——供外部 API 调用，配合 AutoDL 6008 公网映射；**ComfyUI 无内置鉴权，URL 必须保密**）。
 响应：回显已保存配置 + `{"warnings":["extra_args 中未识别的参数：…"]}`
-错误：`invalid_launch_args`（端口越界/非法字符/与面板端口冲突）
+错误：`invalid_launch_args`（端口越界/非法字符/与面板端口冲突）；`listen_host` 非枚举值 → 422。
 预设枚举：`default | low_vram | fp16_fast | custom`（PUT 带 preset≠custom 时服务端展开参数并回填 extra_args）。
 
 ### API-008 系统状态

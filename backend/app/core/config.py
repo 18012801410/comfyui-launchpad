@@ -22,11 +22,14 @@ class ConfigCorruptedError(RuntimeError):
 
 
 class Channels(BaseModel):
-    """分发渠道（提供方边界，可配置替换）。"""
+    """分发渠道（提供方边界，可配置替换）。对外字段名 self。"""
 
     versions: str = "https://github.com/REPLACE_ME/launchpad-versions/releases"
     workflows: str = "https://github.com/REPLACE_ME/launchpad-workflows/releases"
-    self_channel: str = "https://github.com/REPLACE_ME/launchpad-panel/releases"
+    self_channel: str = Field(
+        default="https://github.com/REPLACE_ME/launchpad-panel/releases",
+        alias="self",
+    )
 
     model_config = {"populate_by_name": True}
 

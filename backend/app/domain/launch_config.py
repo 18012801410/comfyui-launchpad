@@ -9,9 +9,11 @@ from __future__ import annotations
 import re
 import shlex
 from enum import Enum
+from pathlib import Path
 
 from pydantic import BaseModel, field_validator
 
+from app.core.config import read_json_with_backup, write_json_atomic
 from app.core.errors import AppError
 
 _EXTRA_ARGS_RE = re.compile(r"^[A-Za-z0-9\s._=/:\-]*$")
@@ -73,3 +75,21 @@ class LaunchConfig(BaseModel):
         if self.extra_args:
             args.extend(shlex.split(self.extra_args, posix=False))
         return args
+
+
+class LaunchConfigStore:
+    """launch-config.json 的类型化读写（当前生效配置，单例）。"""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def load(self) -> LaunchConfig:
+        if not self.path.exists():
+            return LaunchConfig()
+        raw = read_json_with_backup(self.path)
+        if not raw:
+            return LaunchConfig()
+        return LaunchConfig.model_validate(raw)
+
+    def save(self, config: LaunchConfig) -> None:
+        write_json_atomic(self.path, config.model_dump(mode="json"))

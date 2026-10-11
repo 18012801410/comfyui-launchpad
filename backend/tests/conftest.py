@@ -29,9 +29,20 @@ def token(layout: Layout) -> str:
 def client(layout: Layout, token: str) -> Iterator[TestClient]:
     store = SettingsStore(layout.state_dir / "config.json")
     store.initialize(token)
-    app = create_app(settings_store=store, layout=layout)
+    app = create_app(settings_store=store, layout=layout, sse_heartbeat=0.2)
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture()
+def raw_app(layout: Layout, token: str) -> object:
+    """不带 TestClient 的应用实例（供 httpx ASGITransport 异步流式测试）。"""
+    from typing import Any
+
+    store = SettingsStore(layout.state_dir / "config.json")
+    store.initialize(token)
+    app: Any = create_app(settings_store=store, layout=layout, sse_heartbeat=0.2)
+    return app
 
 
 def auth_header(token: str) -> dict[str, str]:

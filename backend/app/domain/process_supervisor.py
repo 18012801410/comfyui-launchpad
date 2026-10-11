@@ -91,6 +91,15 @@ def process_alive(pid: int) -> bool:
     return True
 
 
+def tcp_probe(port: int, host: str = "127.0.0.1", timeout: float = 1.0) -> bool:
+    """端口就绪探测（阻塞，建议经 asyncio.to_thread 调用）。"""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 @dataclass
 class ProcessSnapshot:
     """API-004 /api/comfy/status 的领域来源。"""
@@ -403,18 +412,10 @@ class ProcessSupervisor:
                 return False
             if self._state == ProcessState.STOPPING:
                 return False
-            if await asyncio.to_thread(self._tcp_probe, port):
+            if await asyncio.to_thread(tcp_probe, port):
                 return True
             await asyncio.sleep(READINESS_INTERVAL_S)
         return False
-
-    @staticmethod
-    def _tcp_probe(port: int, host: str = "127.0.0.1") -> bool:
-        try:
-            with socket.create_connection((host, port), timeout=1.0):
-                return True
-        except OSError:
-            return False
 
     async def _terminate(self, proc: asyncio.subprocess.Process) -> None:
         if sys.platform == "win32":

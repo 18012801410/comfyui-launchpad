@@ -28,7 +28,7 @@ from app.core.config import read_json_with_backup, write_json_atomic
 from app.core.errors import AppError
 from app.core.events import EventBus
 from app.core.links import ensure_dir_link, remove_dir_link
-from app.core.paths import Layout
+from app.core.paths import MODEL_CATEGORIES, Layout
 from app.infra.downloader import build_accel_env, download_file, fetch_json
 
 TOPIC_VERSIONS = "versions"
@@ -108,7 +108,7 @@ def make_tar_zst(src_dir: Path, out_path: Path) -> None:
 
 
 def ensure_shared_links(version_dir: Path, layout: Layout) -> None:
-    """版本目录内建立共享数据布局链接（FR-007）。"""
+    """版本目录内建立共享数据布局链接（FR-007）并生成 extra_model_paths.yaml。"""
     pairs = [
         (layout.shared_models, version_dir / "models"),
         (layout.shared_output, version_dir / "output"),
@@ -123,6 +123,62 @@ def ensure_shared_links(version_dir: Path, layout: Layout) -> None:
                 shutil.rmtree(backup, ignore_errors=True)
             link.rename(backup)
         ensure_dir_link(target, link)
+    write_extra_model_paths(version_dir, layout)
+
+
+# 对标 AutoDL 生态的模型分类（参考实例 extra_model_paths.yaml + ComfyUI 官方分类）
+EXTRA_MODEL_CATEGORIES = [
+    *MODEL_CATEGORIES,
+    "hypernetworks",
+    "ipadapter",
+    "clip_vision",
+    "insightface",
+    "model_patches",
+    "facerestore_models",
+    "ultralytics",
+    "grounding_dino",
+    "inpaint",
+    "diffusers",
+    "mimicmotion",
+]
+
+
+def build_extra_model_paths_yaml(layout: Layout) -> str:
+    """生成对接 AutoDL 模型生态的 extra_model_paths.yaml 内容。
+
+    三段映射（对标 ZEALMAN 实例的挂载方式）：
+    - launchpad:  面板共享布局（数据盘 shared/models）
+    - autodl_tmp: 数据盘模型目录 /root/autodl-tmp/models（公共模型库软链落点）
+    - autodl_fs:  文件存储网盘 /root/autodl-fs/models（跨实例共享）
+    """
+    cats = "\n".join(f"    {c}: {c}" for c in EXTRA_MODEL_CATEGORIES)
+
+    def section(name: str, base_path: str) -> str:
+        return f"{name}:\n    base_path: {base_path}\n{cats}\n"
+
+    return (
+        "# 由 ComfyUI LaunchPad 自动生成：对接 AutoDL 模型生态。\n"
+        "# launchpad=面板共享布局；autodl_tmp=数据盘；autodl_fs=文件存储网盘（跨实例共享）。\n"
+        "# 目录不存在时 ComfyUI 会自动跳过该段，无副作用。\n"
+        + section("launchpad", layout.shared_models.as_posix())
+        + section("autodl_tmp", "/root/autodl-tmp/models")
+        + section("autodl_fs", "/root/autodl-fs/models")
+    )
+
+
+def write_extra_model_paths(version_dir: Path, layout: Layout) -> Path | None:
+    """在版本目录写入 extra_model_paths.yaml（ComfyUI 启动时自动加载）。
+
+    已存在则绝不覆盖（保护用户自配 / Desktop 安装），返回 None。
+    """
+    dest = version_dir / "extra_model_paths.yaml"
+    if dest.exists():
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        build_extra_model_paths_yaml(layout), encoding="utf-8", newline="\n"
+    )
+    return dest
 
 
 def remove_dir_link_if_link(link: Path) -> bool:

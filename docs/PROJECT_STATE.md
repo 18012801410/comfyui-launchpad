@@ -40,7 +40,10 @@
 3. **官方工作流库首批工作流**（用户提供 JSON 后发首个库 Release）
 
 ## 近期变更
+- 2026-10-11（晚）：方案A listen_host 对外暴露 + start/stopping 竞态修复 + README AutoDL 部署流程（install.sh 源码直装模式）
+- 2026-10-11（晚）：**采纳对标实例的公共模型挂载方式**——版本安装时自动生成 extra_model_paths.yaml，三段映射：面板共享布局 + /root/autodl-tmp/models（数据盘）+ /root/autodl-fs/models（文件存储网盘，跨实例共享）；已有文件绝不覆盖；真机验证 ComfyUI 日志确认加载
 - 2026-10-11：完成 TASK-012~020（脚本/自升级/前端全量/E2E），修复 E2E 揭出的 4 个问题（Naive UI 未注册、SPA 回退 404、versions 扫描含 current、/api/panel/logs 未实现）
+- 2026-10-11：对标源码勘察结论（用户提供 D:\comfyui\ComfyUI，为实例 ComfyUI 目录而非面板本体）：①对标把 ComfyUI 本身跑在 6006 公网映射端口（面板占另一映射口）；②公共模型=extra_model_paths.yaml + autodl-fs 网盘 + 公共模型库软链（已采纳）；③面板进程自启机制不在源码内，维持 bashrc+镜像路线判断
 
 ## 下一个任务
 等待用户：① 提供 GitHub 仓库 → 完成发布（改渠道 URL + push + 触发 CI）；② 提供真实 AutoDL 实例 → 执行 install.sh 冒烟；③ 提供首批工作流 JSON → 发工作流库首个版本。

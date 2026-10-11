@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import websockets
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from app.api.envelope import fail
 
@@ -62,9 +62,13 @@ async def proxy_http(request: Request, path: str) -> Response:
         resp = await client.send(req, stream=True)
     except httpx.HTTPError:
         await client.aclose()
+        # ComfyUI 未运行：浏览器访问引导去面板（面板才是产品入口），API 调用保留 JSON
+        accept = request.headers.get("accept", "")
+        if request.method == "GET" and "text/html" in accept:
+            return RedirectResponse("/panel/", status_code=302)
         return JSONResponse(
             status_code=502,
-            content=fail("internal", "ComfyUI 未运行或不可达"),
+            content=fail("internal", "ComfyUI 未运行或不可达，请先在面板中启动"),
         )
 
     resp_headers = _forward_headers(resp.headers)

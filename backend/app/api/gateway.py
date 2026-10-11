@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import websockets
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.api.envelope import fail
 
@@ -26,7 +26,7 @@ HOP_BY_HOP = {
 }
 
 
-def target_base(request: Request) -> str:
+def target_base(request: Request | WebSocket) -> str:
     port = request.app.state.launch_store.load().listen_port
     return f"http://127.0.0.1:{port}"
 
@@ -44,7 +44,7 @@ def _forward_headers(headers: Any) -> dict[str, str]:
     "/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
 )
-async def proxy_http(request: Request, path: str) -> StreamingResponse:
+async def proxy_http(request: Request, path: str) -> Response:
     """根路径 HTTP 全量代理 → 本机 ComfyUI。"""
     base = target_base(request)
     url = f"{base}/{path}"

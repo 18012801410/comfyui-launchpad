@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from app.core.errors import AppError, InvalidTransition
 from app.core.events import EventBus
@@ -155,6 +155,7 @@ class ProcessSupervisor:
         self._cursor = 0
         self._reader_task: asyncio.Task[None] | None = None
         self._monitor_task: asyncio.Task[None] | None = None
+        self._log_fh: TextIO | None = None
         self._stop_lock = asyncio.Lock()
         self._pidfile = layout.state_dir / "comfy-process.json"
 
@@ -179,6 +180,26 @@ class ProcessSupervisor:
         entry = {"cursor": str(self._cursor), "ts": _utcnow_iso(), "source": source, "line": line}
         self._ring.append(entry)
         self._events.publish(_TOPIC_LOGS, {"source": source, "line": line})
+        if source == "comfy":
+            self._write_log_file(line)
+
+    def _open_log_file(self) -> None:
+        """ComfyUI 日志落盘（进程死亡后仍可追溯死因）。"""
+        try:
+            self._layout.logs_dir.mkdir(parents=True, exist_ok=True)
+            name = f"comfy.{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.log"
+            self._log_fh = (self._layout.logs_dir / name).open("a", encoding="utf-8")
+        except OSError:
+            self._log_fh = None
+
+    def _write_log_file(self, line: str) -> None:
+        fh = self._log_fh
+        if fh is not None:
+            try:
+                fh.write(line + "\n")
+                fh.flush()
+            except OSError:
+                self._log_fh = None
 
     def recent_logs(self, tail: int = 300) -> list[dict[str, str]]:
         entries = list(self._ring)
@@ -251,6 +272,7 @@ class ProcessSupervisor:
         self._write_pidfile()
 
         self._append_log(f"ComfyUI 启动中 (pid={self._pid}, port={self._port})")
+        self._open_log_file()
         self._reader_task = asyncio.create_task(self._read_output())
         self._monitor_task = asyncio.create_task(self._monitor_exit())
 
@@ -448,6 +470,10 @@ class ProcessSupervisor:
 
     async def _finalize(self, stopped_by_user: bool, exit_code: int | None) -> None:
         self._exit_code = exit_code
+        if self._log_fh is not None:
+            with contextlib.suppress(OSError):
+                self._log_fh.close()
+            self._log_fh = None
         self._stopped_at = _utcnow_iso()
         self._proc = None
         self._pid = None

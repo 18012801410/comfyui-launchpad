@@ -35,12 +35,23 @@ async function load(): Promise<void> {
   }
 }
 
+const channelUnavailable = ref("");
+
 async function checkUpdate(): Promise<void> {
   checkingUpdate.value = true;
+  channelUnavailable.value = "";
   try {
     updateInfo.value = await api.panelUpdateInfo();
   } catch (e) {
-    message.error(e instanceof Error ? e.message : "检查更新失败");
+    // 渠道不可达是常见状态（首次部署/网络受限），页面内提示而非打断
+    channelUnavailable.value = e instanceof Error ? e.message : "检查更新失败";
+    updateInfo.value = {
+      current_version: "—",
+      latest_version: "—",
+      available: false,
+      notes: "",
+      checking: false,
+    };
   } finally {
     checkingUpdate.value = false;
   }
@@ -109,8 +120,8 @@ async function loadPanelLogs(): Promise<void> {
         : data.lines
             .filter((l) => l.includes(level))
             .join("\n");
-  } catch (e) {
-    message.error(e instanceof Error ? e.message : "日志加载失败");
+  } catch {
+    panelLogs.value = "（面板日志不可读——生产环境由 supervisor 写入 logs/panel.log）";
   }
 }
 
@@ -204,6 +215,9 @@ const themeOptions: { label: string; value: ThemeChoice }[] = [
           </n-space>
           <n-text v-if="updateInfo?.notes" depth="3" style="font-size: 12px; white-space: pre-wrap">
             {{ updateInfo.notes }}
+          </n-text>
+          <n-text v-if="channelUnavailable" depth="3" style="font-size: 12px">
+            更新渠道不可达：{{ channelUnavailable }}
           </n-text>
           <n-alert
             v-if="updatePhase !== 'idle' && updatePhase !== 'done'"

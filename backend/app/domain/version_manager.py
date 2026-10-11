@@ -359,6 +359,8 @@ class VersionManager:
             for child in sorted(self._layout.versions_dir.iterdir()):
                 if not child.is_dir() or child.name.startswith(".") or child.name.endswith(".old"):
                     continue
+                if child.name == "current":  # 符号链接本身不是版本
+                    continue
                 if not (child / "main.py").is_file():
                     continue
                 meta = state_map.get(child.name, {})

@@ -83,3 +83,26 @@ async def perform_update(request: Request, settings: SettingsDep) -> object:
     )
     request.app.state.install_tasks["panel-update"] = task
     return JSONResponse(status_code=202, content=_ok({"phase": "downloading"}))
+
+
+# ---------- 面板日志（API-016） ----------
+
+@router.get("/logs")
+def panel_logs(
+    request: Request,
+    _s: SettingsDep,
+    level: str = "INFO",
+    tail: int = 500,
+) -> dict[str, object]:
+    layout = request.app.state.layout
+    log_file = layout.logs_dir / "panel.log"
+    lines: list[str] = []
+    if log_file.is_file():
+        try:
+            all_lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            all_lines = []
+        if level != "INFO":
+            all_lines = [ln for ln in all_lines if level in ln]
+        lines = all_lines[-max(1, min(tail, 2000)) :]
+    return ok({"lines": lines})

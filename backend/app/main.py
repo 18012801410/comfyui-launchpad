@@ -137,13 +137,28 @@ def create_app(
 
 
 def _mount_static(app: FastAPI) -> None:
-    """挂载前端构建产物（存在时）；API 路由优先于 SPA 回退。"""
+    """挂载前端构建产物（存在时）；API 路由优先，未知 API 路径保持 404 JSON，
+    其余路径回退 index.html（SPA history 路由刷新）。"""
     dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if not dist.is_dir():
         return
     from fastapi.staticfiles import StaticFiles
 
-    app.mount("/", StaticFiles(directory=dist, html=True), name="spa")
+    class SPAStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope: dict):  # type: ignore[override,no-untyped-def]
+            from starlette.exceptions import HTTPException
+
+            try:
+                resp = await super().get_response(path, scope)
+            except HTTPException as exc:
+                if exc.status_code == 404 and not path.startswith("api/"):
+                    return await super().get_response("index.html", scope)
+                raise
+            if resp.status_code == 404 and not path.startswith("api/"):
+                return await super().get_response("index.html", scope)
+            return resp
+
+    app.mount("/", SPAStaticFiles(directory=dist, html=True), name="spa")
 
 
 app = create_app()

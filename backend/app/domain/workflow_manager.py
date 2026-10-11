@@ -222,8 +222,9 @@ class WorkflowManager:
         if not self._registry_path.exists():
             return []
         try:
-            raw = read_json_with_backup(self._registry_path)
-            return [WorkflowItem.model_validate(i) for i in raw.get("items", [])]
+            raw: dict[str, Any] = read_json_with_backup(self._registry_path)
+            items_raw: list[Any] = list(raw.get("items", []))
+            return [WorkflowItem.model_validate(i) for i in items_raw]
         except Exception:  # noqa: BLE001
             return []
 

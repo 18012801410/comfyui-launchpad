@@ -36,11 +36,11 @@ async def library(
 ) -> dict[str, object]:
     mgr = _manager(request)
     if refresh:
-        index = await mgr.refresh_library(
+        refreshed = await mgr.refresh_library(
             accel_enabled=settings.academic_accel_default
         )
         payload = {
-            "workflows": [w.model_dump() for w in index.workflows],
+            "workflows": [w.model_dump() for w in refreshed.workflows],
             "cached_at": None,
             "stale": False,
         }

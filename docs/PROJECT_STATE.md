@@ -40,6 +40,7 @@
 3. **官方工作流库首批工作流**（用户提供 JSON 后发首个库 Release）
 
 ## 近期变更
+- 2026-10-11（深夜）：**首次真实 AutoDL 实例部署成功**（用户实例 westd.seetacloud，ComfyUI 应用镜像）。关键经验：①这类镜像开机自启 ComfyUI 占 6006（经 /root/start-comfyui.sh，源自镜像）；②面板接管方式=改写该脚本+补 /etc/autodl.sh 双钩子拉起面板，原件备份 .orig；③公网映射只有 6006→8443 一条（环境变量 AutoDLService6006URL 可查），面板占 6006 后 ComfyUI UI 外部访问暂需 SSH 隧道（鉴权网关为二期正解）；④miniconda Python 无 python3 命令，部署需 PYTHON_BIN 显式指定；⑤deploy_autodl.sh 已就绪（密码登录场景暂需手动/paramiko，可后续加 sshpass 支持）
 - 2026-10-11（晚）：方案A listen_host 对外暴露 + start/stopping 竞态修复 + README AutoDL 部署流程（install.sh 源码直装模式）
 - 2026-10-11（晚）：**采纳对标实例的公共模型挂载方式**——版本安装时自动生成 extra_model_paths.yaml，三段映射：面板共享布局 + /root/autodl-tmp/models（数据盘）+ /root/autodl-fs/models（文件存储网盘，跨实例共享）；已有文件绝不覆盖；真机验证 ComfyUI 日志确认加载
 - 2026-10-11：完成 TASK-012~020（脚本/自升级/前端全量/E2E），修复 E2E 揭出的 4 个问题（Naive UI 未注册、SPA 回退 404、versions 扫描含 current、/api/panel/logs 未实现）

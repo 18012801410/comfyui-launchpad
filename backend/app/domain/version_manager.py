@@ -509,13 +509,25 @@ def resolve_current_dir(layout: Layout) -> Path | None:
 
 
 def python_exe_for(version_dir: Path) -> Path:
-    """版本内独立 venv 解释器；兼容 venv/.venv（Desktop 约定），缺失回退面板解释器。"""
+    """版本内独立 venv 解释器；兼容 venv/.venv（Desktop 约定）。
+
+    回退顺序：venv → .venv → miniconda 基础环境（AutoDL 镜像惯例：
+    ComfyUI 依赖直接装在 base，无 venv）→ 面板自身解释器。
+    """
     sub = "Scripts" if sys.platform == "win32" else "bin"
     exe = "python.exe" if sys.platform == "win32" else "python"
     for name in ("venv", ".venv"):
         candidate = version_dir / name / sub / exe
         if candidate.is_file():
             return candidate
+    if sys.platform != "win32":
+        for candidate in (
+            Path("/root/miniconda3/bin/python"),
+            Path.home() / "miniconda3" / "bin" / "python",
+            Path("/root/anaconda3/bin/python"),
+        ):
+            if candidate.is_file():
+                return candidate
     return Path(sys.executable)
 
 

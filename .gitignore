@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 运行期数据（不入库）
+*.log
+state/

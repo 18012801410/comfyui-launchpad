@@ -43,6 +43,7 @@ class IndexEntry(BaseModel):
     release_date: str = ""
     torch_baseline: str = ""
     min_python: str = "3.10"
+    python_abi: str = ""  # 空表示不限制；非空须与实例 Python 大版本一致（venv 不可迁移）
     size_mb: int = 0
     sha256: str = ""
     url: str
@@ -217,6 +218,14 @@ class VersionManager:
             raise AppError(
                 "version_not_ready",
                 f"该版本要求 Python ≥ {entry.min_python}，当前 {sys.version.split()[0]}",
+                status=400,
+            )
+        if entry.python_abi and entry.python_abi != f"{sys.version_info[0]}.{sys.version_info[1]}":
+            raise AppError(
+                "version_not_ready",
+                f"该版本包为 Python {entry.python_abi} ABI 构建，"
+                f"与当前实例 Python {sys.version_info[0]}.{sys.version_info[1]} 不兼容"
+                "（包内 venv 不可跨 ABI 迁移）",
                 status=400,
             )
 

@@ -31,6 +31,15 @@ def target_base(request: Request | WebSocket) -> str:
     return f"http://127.0.0.1:{port}"
 
 
+def _headers_kwarg() -> str:
+    import inspect
+
+    params = inspect.signature(websockets.connect).parameters
+    if "additional_headers" in params:
+        return "additional_headers"
+    return "extra_headers"
+
+
 def _forward_headers(headers: Any, target_base: str) -> dict[str, str]:
     """转发头：剔除逐跳头；改写 Origin/Referer 为后端视角。
 
@@ -122,10 +131,10 @@ async def proxy_ws(websocket: WebSocket, ws_path: str = "") -> None:
     target = f"ws://127.0.0.1:{base.split(':')[-1]}/{ws_path}{query}"
     await websocket.accept()
     try:
-        async with websockets.connect(
-            target, max_size=None, open_timeout=10,
-            extra_headers={"Origin": base},
-        ) as upstream:
+        ws_kwargs: dict[str, Any] = {"max_size": None, "open_timeout": 10}
+        # websockets 版本兼容：旧版参数 extra_headers，新版(≥14)改名 additional_headers
+        ws_kwargs[_headers_kwarg()] = {"Origin": base}
+        async with websockets.connect(target, **ws_kwargs) as upstream:
             import asyncio
 
             async def pump_in() -> None:

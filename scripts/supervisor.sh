@@ -35,7 +35,8 @@ do_start() {
   cd "$LAUNCHPAD_DIR/current/backend"
   nohup env LAUNCHPAD_DATA_DIR="$DATA_DIR" LAUNCHPAD_DIR="$LAUNCHPAD_DIR" \
     "$LAUNCHPAD_DIR/venv/bin/python" -m uvicorn app.main:app \
-    --host 127.0.0.1 --port "$port" >>"$LOG_FILE" 2>&1 &
+    --host 127.0.0.1 --port "$port" \
+    --ws-ping-interval 0 >>"$LOG_FILE" 2>&1 &
   echo $! > "$PID_FILE"
   # 健康检查
   for _ in $(seq 1 "$HEALTH_TIMEOUT"); do

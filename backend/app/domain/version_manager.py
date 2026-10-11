@@ -375,11 +375,8 @@ class VersionManager:
     def _mark_removed(self, version: str) -> None:
         if not self._state_path.exists():
             return
-        try:
-            raw = read_json_with_backup(self._state_path)
-        except Exception:  # noqa: BLE001
-            return
-        installed: dict[str, Any] = dict(raw.get("installed", {}))
+        raw_obj: dict[str, Any] = read_json_with_backup(self._state_path)
+        installed: dict[str, Any] = dict(raw_obj.get("installed", {}))
         installed.pop(version, None)
         write_json_atomic(self._state_path, {"installed": installed})
 

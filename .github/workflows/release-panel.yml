@@ -1,0 +1,64 @@
+name: Release Panel
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "面板版本号（如 2026.10.11 或 0.1.0）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install zstd
+        run: sudo apt-get update && sudo apt-get install -y zstd
+      - name: Build panel package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash packaging/build_panel.sh "$VERSION"
+      - name: Generate panel index
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'EOF'
+          import json, os
+          from pathlib import Path
+          manifest = json.loads(next(Path("dist").glob("manifest-panel-*.json")).read_text(encoding="utf-8"))
+          repo = os.environ.get("GITHUB_REPOSITORY", "REPLACE_ME/launchpad-panel")
+          manifest["url"] = manifest["url"].replace(
+              "${GITHUB_REPOSITORY:-REPLACE_ME/launchpad-panel}", repo)
+          index = {
+              "channel": "launchpad-panel",
+              "updated_at": manifest["published_at"],
+              "releases": [manifest],
+          }
+          Path("dist/panel-index.json").write_text(
+              json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print("panel-index.json generated:", manifest["version"])
+          EOF
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: panel-v${{ inputs.version }}
+          name: LaunchPad 面板 ${{ inputs.version }}
+          body: |
+            一键安装/升级命令（实例内执行）：
+            ```
+            curl -fL https://github.com/${{ github.repository }}/releases/latest/download/install.sh -o install.sh && bash install.sh
+            ```
+          files: |
+            dist/launchpad-*.tar.zst
+            dist/panel-index.json
+            scripts/install.sh
+          fail_on_unmatched_files: true

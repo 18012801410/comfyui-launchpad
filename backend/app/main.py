@@ -94,6 +94,20 @@ def create_app(
         layout, channel_provider=_workflows_channel_base
     )
     app.include_router(workflows_router)
+
+    def _self_channel_base() -> str:
+        store: SettingsStore = app.state.settings_store
+        settings = store.load()
+        return settings.channels.self_channel if settings else DEFAULT_SELF_CHANNEL
+
+    from app.domain.self_updater import DEFAULT_SELF_CHANNEL, SelfUpdater
+
+    app.state.self_updater = SelfUpdater(
+        layout,
+        events=app.state.events,
+        channel_provider=_self_channel_base,
+        current_version_provider=lambda: __version__,
+    )
     from app.api.versions import router as versions_router
 
     app.include_router(versions_router)

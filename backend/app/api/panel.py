@@ -59,3 +59,27 @@ def put_settings(
         "panel_port" in update and update["panel_port"] != settings.panel_port
     )
     return ok({**_public(new_settings), "restart_required": restart_required})
+
+
+# ---------- 面板更新（API-015） ----------
+
+@router.get("/update")
+async def check_update(request: Request, settings: SettingsDep) -> dict[str, object]:
+    updater = request.app.state.self_updater
+    return ok(await updater.check_update(accel_enabled=settings.academic_accel_default))
+
+
+@router.post("/update")
+async def perform_update(request: Request, settings: SettingsDep) -> object:
+    import asyncio
+
+    from fastapi.responses import JSONResponse
+
+    from app.api.envelope import ok as _ok
+
+    updater = request.app.state.self_updater
+    task = asyncio.create_task(
+        updater.perform_update(accel_enabled=settings.academic_accel_default)
+    )
+    request.app.state.install_tasks["panel-update"] = task
+    return JSONResponse(status_code=202, content=_ok({"phase": "downloading"}))

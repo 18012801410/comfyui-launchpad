@@ -69,16 +69,22 @@ do_status() {
 }
 
 do_switch() {
-  # $1 = 新版本目录（已由自升级器解压就位）；失败自动回滚
-  local new_dir="$1"
-  local old_target port pid
-  port="$(panel_port)"
+  # $1 = 新版本 staging 目录（自升级器已解压就位）；本命令负责落位→停旧→切换→健康检查→失败回滚
+  local staging_dir="$1"
+  local version new_dir old_target port
+  version="$(basename "$staging_dir" | sed 's/\.staging$//')"
+  new_dir="$LAUNCHPAD_DIR/releases/$version"
   old_target="$(readlink -f "$LAUNCHPAD_DIR/current" 2>/dev/null || true)"
+
+  # 落位新版本（先清残留）
+  rm -rf "$new_dir"
+  mkdir -p "$LAUNCHPAD_DIR/releases"
+  mv "$staging_dir" "$new_dir" || { echo "rolled-back:move-failed"; return 1; }
 
   do_stop >/dev/null
   ln -sfn "$new_dir" "$LAUNCHPAD_DIR/current"
   if do_start | grep -q "^started$"; then
-    echo "switched:$new_dir"
+    echo "switched:$version"
     # 清理旧版本目录（保留最近 2 个）
     (
       cd "$LAUNCHPAD_DIR/releases" 2>/dev/null || exit 0
@@ -87,7 +93,10 @@ do_switch() {
     return 0
   fi
   echo "switch-failed,rolling-back" >&2
-  ln -sfn "$old_target" "$LAUNCHPAD_DIR/current"
+  rm -rf "$new_dir"
+  if [ -n "$old_target" ]; then
+    ln -sfn "$old_target" "$LAUNCHPAD_DIR/current"
+  fi
   do_start >/dev/null || true
   echo "rolled-back:$old_target"
   return 1

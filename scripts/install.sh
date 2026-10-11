@@ -80,6 +80,8 @@ rm -rf "$TARGET"
 mkdir -p "$TARGET"
 cp -r "$NEW_DIR/." "$TARGET/"
 ln -sfn "$TARGET" "$LAUNCHPAD_DIR/current"
+# supervisor.sh 固定在面板根目录（自升级 switch 接口依赖该路径）
+cp "$TARGET/scripts/supervisor.sh" "$LAUNCHPAD_DIR/supervisor.sh"
 log "面板 $VERSION 已就位于 $TARGET"
 
 # ---------- 3. 面板运行 venv ----------

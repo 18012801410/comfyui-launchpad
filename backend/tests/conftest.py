@@ -15,7 +15,9 @@ from app.main import create_app
 
 @pytest.fixture()
 def layout(tmp_path: Path) -> Layout:
-    lay = build_layout(data_dir=str(tmp_path / "data"))
+    lay = build_layout(
+        data_dir=str(tmp_path / "data"), launchpad_dir=str(tmp_path / "launchpad")
+    )
     lay.ensure()
     return lay
 

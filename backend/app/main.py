@@ -26,6 +26,8 @@ from app.domain.sysinfo import SysinfoCollector
 
 logger = logging.getLogger("launchpad")
 
+PANEL_PREFIX = "/panel"
+
 
 def create_app(
     settings_store: SettingsStore | None = None,
@@ -73,27 +75,17 @@ def create_app(
         is_running=_is_comfy_running,
         channel_provider=_versions_channel_base,
     )
-    if sse_heartbeat is not None:
-        app.state.sse_heartbeat = sse_heartbeat
 
-    app.include_router(health_router)
-    app.include_router(auth_router)
-    app.include_router(panel_router)
-    app.include_router(comfy_router)
-    app.include_router(system_router)
-    app.include_router(sse_router)
     def _workflows_channel_base() -> str:
         store: SettingsStore = app.state.settings_store
         settings = store.load()
         return settings.channels.workflows if settings else DEFAULT_WORKFLOWS_CHANNEL
 
-    from app.api.workflows import router as workflows_router
     from app.domain.workflow_manager import DEFAULT_WORKFLOWS_CHANNEL, WorkflowManager
 
     app.state.workflow_manager = WorkflowManager(
         layout, channel_provider=_workflows_channel_base
     )
-    app.include_router(workflows_router)
 
     def _self_channel_base() -> str:
         store: SettingsStore = app.state.settings_store
@@ -108,14 +100,35 @@ def create_app(
         channel_provider=_self_channel_base,
         current_version_provider=lambda: __version__,
     )
-    from app.api.versions import router as versions_router
 
-    app.include_router(versions_router)
-    from app.api.plugins import router as plugins_router
+    if sse_heartbeat is not None:
+        app.state.sse_heartbeat = sse_heartbeat
 
-    app.include_router(plugins_router)
     for r in extra_routers or []:
         app.include_router(r)
+
+    # ---------- 路由编排（公网唯一入口架构，对标参考面板） ----------
+    # 1) 面板自身 API 挂 /panel 前缀（/panel/api/...，带令牌）
+    # 2) 面板 SPA 挂 /panel
+    # 3) 网关占根路径：其余全部反向代理到本机 ComfyUI（HTTP+WS）
+    app.include_router(health_router, prefix=PANEL_PREFIX)
+    app.include_router(auth_router, prefix=PANEL_PREFIX)
+    app.include_router(panel_router, prefix=PANEL_PREFIX)
+    app.include_router(comfy_router, prefix=PANEL_PREFIX)
+    app.include_router(system_router, prefix=PANEL_PREFIX)
+    app.include_router(sse_router, prefix=PANEL_PREFIX)
+    from app.api.plugins import router as plugins_router
+    from app.api.versions import router as versions_router
+    from app.api.workflows import router as workflows_router
+
+    app.include_router(workflows_router, prefix=PANEL_PREFIX)
+    app.include_router(versions_router, prefix=PANEL_PREFIX)
+    app.include_router(plugins_router, prefix=PANEL_PREFIX)
+    _mount_panel_spa(app)
+
+    from app.api.gateway import router as gateway_router
+
+    app.include_router(gateway_router)
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
@@ -132,13 +145,15 @@ def create_app(
             content=fail("internal", "内部错误，请查看面板日志"),
         )
 
-    _mount_static(app)
     return app
 
 
-def _mount_static(app: FastAPI) -> None:
-    """挂载前端构建产物（存在时）；API 路由优先，未知 API 路径保持 404 JSON，
-    其余路径回退 index.html（SPA history 路由刷新）。"""
+def _mount_panel_spa(app: FastAPI) -> None:
+    """面板 SPA 挂载于 /panel（存在构建产物时）。
+
+    面板 API 路由已先行注册（/panel/api/...），挂载仅兜住 SPA 的 history 路由
+    （/panel/versions 等 404 时回退 index.html）；根路径留给 ComfyUI 网关。
+    """
     dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if not dist.is_dir():
         return
@@ -151,14 +166,14 @@ def _mount_static(app: FastAPI) -> None:
             try:
                 resp = await super().get_response(path, scope)
             except HTTPException as exc:
-                if exc.status_code == 404 and not path.startswith("api/"):
+                if exc.status_code == 404:
                     return await super().get_response("index.html", scope)
                 raise
-            if resp.status_code == 404 and not path.startswith("api/"):
+            if resp.status_code == 404:
                 return await super().get_response("index.html", scope)
             return resp
 
-    app.mount("/", SPAStaticFiles(directory=dist, html=True), name="spa")
+    app.mount(PANEL_PREFIX, SPAStaticFiles(directory=dist, html=True), name="panel-spa")
 
 
 app = create_app()

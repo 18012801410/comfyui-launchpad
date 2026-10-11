@@ -21,7 +21,7 @@ def _make_fake_version(layout, version: str = "0.39.0") -> Path:
 
 
 def test_status_initial_stopped(client: TestClient, token: str) -> None:
-    resp = client.get("/api/comfy/status", headers=auth_header(token))
+    resp = client.get("/panel/api/comfy/status", headers=auth_header(token))
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["state"] == "stopped"
@@ -29,7 +29,7 @@ def test_status_initial_stopped(client: TestClient, token: str) -> None:
 
 
 def test_start_without_version_404(client: TestClient, token: str) -> None:
-    resp = client.post("/api/comfy/start", headers=auth_header(token))
+    resp = client.post("/panel/api/comfy/start", headers=auth_header(token))
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "version_not_installed"
 
@@ -44,7 +44,7 @@ def test_start_port_conflict(client: TestClient, token: str, layout) -> None:
         free = int(tmp.getsockname()[1])
     assert (
         client.put(
-            "/api/comfy/launch-config",
+            "/panel/api/comfy/launch-config",
             json={"listen_port": free},
             headers=auth_header(token),
         ).status_code
@@ -54,7 +54,7 @@ def test_start_port_conflict(client: TestClient, token: str, layout) -> None:
     blocker.bind(("127.0.0.1", free))
     blocker.listen(1)
     try:
-        resp = client.post("/api/comfy/start", headers=auth_header(token))
+        resp = client.post("/panel/api/comfy/start", headers=auth_header(token))
         assert resp.status_code == 409
         assert resp.json()["error"]["code"] == "port_conflict"
     finally:
@@ -65,13 +65,13 @@ def test_launch_config_roundtrip_and_validation(
     client: TestClient, token: str
 ) -> None:
     # 默认值
-    r0 = client.get("/api/comfy/launch-config", headers=auth_header(token))
+    r0 = client.get("/panel/api/comfy/launch-config", headers=auth_header(token))
     assert r0.status_code == 200
     assert r0.json()["data"]["listen_port"] == 8188
 
     # 合法修改 + 预设
     r1 = client.put(
-        "/api/comfy/launch-config",
+        "/panel/api/comfy/launch-config",
         json={"listen_port": 8288, "preset": "low_vram", "academic_accel": True},
         headers=auth_header(token),
     )
@@ -84,7 +84,7 @@ def test_launch_config_roundtrip_and_validation(
 
     # 非法端口
     r2 = client.put(
-        "/api/comfy/launch-config",
+        "/panel/api/comfy/launch-config",
         json={"listen_port": 80},
         headers=auth_header(token),
     )
@@ -92,7 +92,7 @@ def test_launch_config_roundtrip_and_validation(
 
     # 与面板端口冲突（夹具面板端口 6006）
     r3 = client.put(
-        "/api/comfy/launch-config",
+        "/panel/api/comfy/launch-config",
         json={"listen_port": 6006},
         headers=auth_header(token),
     )
@@ -101,7 +101,7 @@ def test_launch_config_roundtrip_and_validation(
 
     # extra_args 非法字符
     r4 = client.put(
-        "/api/comfy/launch-config",
+        "/panel/api/comfy/launch-config",
         json={"extra_args": "--evil `rm -rf /`"},
         headers=auth_header(token),
     )
@@ -110,13 +110,13 @@ def test_launch_config_roundtrip_and_validation(
 
 
 def test_logs_endpoint_empty(client: TestClient, token: str) -> None:
-    resp = client.get("/api/comfy/logs?tail=10", headers=auth_header(token))
+    resp = client.get("/panel/api/comfy/logs?tail=10", headers=auth_header(token))
     assert resp.status_code == 200
     assert resp.json()["data"]["lines"] == []
 
 
 def test_system_status_shape(client: TestClient, token: str) -> None:
-    resp = client.get("/api/system/status", headers=auth_header(token))
+    resp = client.get("/panel/api/system/status", headers=auth_header(token))
     assert resp.status_code == 200
     data = resp.json()["data"]
     for key in ("gpu", "memory", "disk", "cuda", "python_version", "comfy_process"):
@@ -125,7 +125,7 @@ def test_system_status_shape(client: TestClient, token: str) -> None:
 
 
 def test_sse_requires_auth(client: TestClient) -> None:
-    resp = client.get("/api/events")
+    resp = client.get("/panel/api/events")
     assert resp.status_code == 401
 
 
@@ -157,7 +157,7 @@ async def test_sse_connected_and_heartbeat(raw_app: object, token: str) -> None:
         received: list[str] = []
         async with httpx.AsyncClient(trust_env=False) as ac, ac.stream(
             "GET",
-            f"http://127.0.0.1:{port}/api/events?topics=process",
+            f"http://127.0.0.1:{port}/panel/api/events?topics=process",
             headers=auth_header(token),
         ) as resp:
             assert resp.status_code == 200

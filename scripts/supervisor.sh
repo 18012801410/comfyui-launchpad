@@ -39,7 +39,7 @@ do_start() {
   echo $! > "$PID_FILE"
   # 健康检查
   for _ in $(seq 1 "$HEALTH_TIMEOUT"); do
-    if curl -sf "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; then
+    if curl -sf "http://127.0.0.1:$port/panel/api/health" >/dev/null 2>&1; then
       echo "started"
       return 0
     fi

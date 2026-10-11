@@ -7,7 +7,7 @@ from app.main import app
 
 def test_health_ok() -> None:
     client = TestClient(app)
-    resp = client.get("/api/health")
+    resp = client.get("/panel/api/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["ok"] is True

@@ -1,6 +1,7 @@
 /** 统一 API 客户端：令牌注入、错误包络解析、401 处理。 */
 
 const TOKEN_KEY = "launchpad_token";
+const BASE = "/panel";
 
 export class ApiError extends Error {
   code: string;
@@ -41,7 +42,7 @@ export async function request<T>(
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
-  const resp = await fetch(path, {
+  const resp = await fetch(`${BASE}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -229,7 +230,7 @@ export const api = {
   uploadWorkflow: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return fetch("/api/workflows/upload", {
+    return fetch(`${BASE}/api/workflows/upload`, {
       method: "POST",
       headers: { Authorization: `Bearer ${getToken()}` },
       body: form,
@@ -265,7 +266,7 @@ export function connectSse(topics: string[], handlers: SseHandlers): () => void 
   const connect = async (): Promise<void> => {
     while (!closed) {
       try {
-        const resp = await fetch(`/api/events?topics=${topics.join(",")}`, {
+        const resp = await fetch(`${BASE}/api/events?topics=${topics.join(",")}`, {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
         if (!resp.ok || !resp.body) throw new Error(`SSE HTTP ${resp.status}`);

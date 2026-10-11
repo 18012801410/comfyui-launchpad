@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 
 // 开发时代理到本机面板后端；构建产物 dist/ 由后端静态挂载。
 export default defineConfig({
+  base: "/panel/",
   plugins: [vue()],
   server: {
     proxy: {

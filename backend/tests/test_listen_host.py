@@ -29,7 +29,7 @@ def test_invalid_host_rejected() -> None:
 
 def test_api_roundtrip_listen_host(client: TestClient, token: str) -> None:
     r = client.put(
-        "/api/comfy/launch-config",
+        "/panel/api/comfy/launch-config",
         json={"listen_host": "0.0.0.0", "listen_port": 6008},
         headers=auth_header(token),
     )
@@ -38,12 +38,12 @@ def test_api_roundtrip_listen_host(client: TestClient, token: str) -> None:
     assert data["listen_host"] == "0.0.0.0"
     assert data["listen_port"] == 6008
 
-    r2 = client.get("/api/comfy/launch-config", headers=auth_header(token))
+    r2 = client.get("/panel/api/comfy/launch-config", headers=auth_header(token))
     assert r2.json()["data"]["listen_host"] == "0.0.0.0"
 
     # 非法 host → 422
     r3 = client.put(
-        "/api/comfy/launch-config",
+        "/panel/api/comfy/launch-config",
         json={"listen_host": "example.com"},
         headers=auth_header(token),
     )

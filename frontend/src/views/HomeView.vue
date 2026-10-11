@@ -258,7 +258,7 @@ function fmtMb(v: number | null): string {
           <template #trigger>
             <n-button
               tag="a"
-              :href="status?.port_ready ? `http://127.0.0.1:${status.port}` : undefined"
+              :href="status?.port_ready ? '/' : undefined"
               target="_blank"
               :disabled="!status?.port_ready"
             >
@@ -268,7 +268,7 @@ function fmtMb(v: number | null): string {
           </template>
           {{
             status?.port_ready
-              ? `在新标签页打开本机 ${status.port} 端口（公网请使用 AutoDL 映射域名）`
+              ? "在新标签页打开 ComfyUI 界面（经由面板网关，公网可用）"
               : "ComfyUI 未运行"
           }}
         </n-tooltip>

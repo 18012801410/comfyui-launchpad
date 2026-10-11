@@ -30,6 +30,12 @@ sys.exit(0 if (major, minor) >= (3, 10) else 1)
 EOF
 log "Python ${PY_VERSION} ✓"
 
+# 重装/升级：先停旧面板，避免端口探测误判与双进程
+if [ -f "$LAUNCHPAD_DIR/supervisor.sh" ]; then
+  bash "$LAUNCHPAD_DIR/supervisor.sh" stop >/dev/null 2>&1 || true
+  sleep 1
+fi
+
 if [ ! -d /root/autodl-tmp ]; then
   fail "未检测到数据盘 /root/autodl-tmp，请先在 AutoDL 控制台为实例挂载数据盘"
 fi

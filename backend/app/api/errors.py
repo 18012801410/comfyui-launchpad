@@ -1,19 +1,31 @@
-"""业务异常与稳定错误码（docs/API_SPEC.md「稳定错误码」）。"""
+"""稳定错误码辅助构造器（docs/API_SPEC.md「稳定错误码」）。
+
+AppError 本体在 app.core.errors（领域层可用）；此处只提供各错误码的语义化构造。
+"""
 
 from __future__ import annotations
 
+from app.core.errors import AppError
 
-class AppError(Exception):
-    """带稳定错误码的业务异常；API 层统一转为错误包络。"""
-
-    status = 400
-
-    def __init__(self, code: str, message: str, status: int | None = None) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        if status is not None:
-            self.status = status
+__all__ = [
+    "AppError",
+    "auth_required",
+    "invalid_token",
+    "conflict_process_running",
+    "conflict_install_in_progress",
+    "version_not_installed",
+    "version_not_ready",
+    "version_in_use",
+    "path_forbidden",
+    "invalid_launch_args",
+    "invalid_workflow",
+    "download_failed",
+    "checksum_mismatch",
+    "disk_insufficient",
+    "port_conflict",
+    "plugin_update_failed",
+    "index_unavailable",
+]
 
 
 def auth_required(message: str = "需要访问令牌") -> AppError:

@@ -31,13 +31,40 @@ def target_base(request: Request | WebSocket) -> str:
     return f"http://127.0.0.1:{port}"
 
 
-def _forward_headers(headers: Any) -> dict[str, str]:
+def _forward_headers(headers: Any, target_base: str) -> dict[str, str]:
+    """转发头：剔除逐跳头；改写 Origin/Referer 为后端视角。
+
+    ComfyUI 有防 DNS 重绑定校验（Origin 的 host 与 Host 头不一致返回 403），
+    经网关访问时必须把来源改写成后端自己的地址，否则前端全部 403。
+    """
     out: dict[str, str] = {}
+    origin_key = referer_key = None
     for k, v in headers.items():
-        if k.lower() in HOP_BY_HOP or k.lower() == "host":
+        low = k.lower()
+        if low in HOP_BY_HOP or low == "host":
+            continue
+        if low == "origin":
+            origin_key = k
+            continue
+        if low == "referer":
+            referer_key = k
             continue
         out[k] = v
+    if origin_key is not None:
+        out[origin_key] = target_base
+    if referer_key is not None:
+        out[referer_key] = target_base + "/"
     return out
+
+
+@router.get("/", include_in_schema=False)
+async def root_to_panel() -> Response:
+    """根路径 = 产品入口：打开就是面板（302 到 /panel/）。
+
+    ComfyUI 界面在 /index.html（其前端为 SPA，唯一入口页单独代理，其余
+    绝对路径 /assets、/api、/ws 等由下方 catch-all 原样转发，零冲突）。
+    """
+    return RedirectResponse("/panel/", status_code=302)
 
 
 @router.api_route(
@@ -51,7 +78,7 @@ async def proxy_http(request: Request, path: str) -> Response:
     if request.url.query:
         url += f"?{request.url.query}"
     body = await request.body()
-    headers = _forward_headers(request.headers)
+    headers = _forward_headers(request.headers, base)
     headers["Host"] = f"127.0.0.1:{request.app.state.launch_store.load().listen_port}"
 
     client = httpx.AsyncClient(trust_env=False, timeout=httpx.Timeout(30, read=300))
@@ -71,7 +98,7 @@ async def proxy_http(request: Request, path: str) -> Response:
             content=fail("internal", "ComfyUI 未运行或不可达，请先在面板中启动"),
         )
 
-    resp_headers = _forward_headers(resp.headers)
+    resp_headers = _forward_headers(resp.headers, base)
 
     async def stream() -> Any:
         try:
@@ -96,7 +123,8 @@ async def proxy_ws(websocket: WebSocket, ws_path: str = "") -> None:
     await websocket.accept()
     try:
         async with websockets.connect(
-            target, max_size=None, open_timeout=10
+            target, max_size=None, open_timeout=10,
+            extra_headers={"Origin": base},
         ) as upstream:
             import asyncio
 
@@ -126,12 +154,18 @@ async def proxy_ws(websocket: WebSocket, ws_path: str = "") -> None:
                 except Exception:  # noqa: BLE001
                     pass
 
-            done, _ = await asyncio.wait(
-                [asyncio.create_task(pump_in()), asyncio.create_task(pump_out())],
-                return_when=asyncio.FIRST_COMPLETED,
+            tasks = [
+                asyncio.create_task(pump_in()),
+                asyncio.create_task(pump_out()),
+            ]
+            _done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
             )
-            for t in done:
+            # 关键：取消未完成方向的泵（孤儿任务会导致连接反复断开重连）
+            for t in pending:
                 t.cancel()
+            with contextlib.suppress(Exception):
+                await asyncio.gather(*pending, return_exceptions=True)
     except (WebSocketDisconnect, websockets.exceptions.WebSocketException, OSError):
         pass
     finally:

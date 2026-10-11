@@ -258,7 +258,7 @@ function fmtMb(v: number | null): string {
           <template #trigger>
             <n-button
               tag="a"
-              :href="status?.port_ready ? '/' : undefined"
+              :href="status?.port_ready ? '/index.html' : undefined"
               target="_blank"
               :disabled="!status?.port_ready"
             >

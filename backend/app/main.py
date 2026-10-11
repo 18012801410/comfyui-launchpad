@@ -82,9 +82,24 @@ def create_app(
     app.include_router(comfy_router)
     app.include_router(system_router)
     app.include_router(sse_router)
+    def _workflows_channel_base() -> str:
+        store: SettingsStore = app.state.settings_store
+        settings = store.load()
+        return settings.channels.workflows if settings else DEFAULT_WORKFLOWS_CHANNEL
+
+    from app.api.workflows import router as workflows_router
+    from app.domain.workflow_manager import DEFAULT_WORKFLOWS_CHANNEL, WorkflowManager
+
+    app.state.workflow_manager = WorkflowManager(
+        layout, channel_provider=_workflows_channel_base
+    )
+    app.include_router(workflows_router)
     from app.api.versions import router as versions_router
 
     app.include_router(versions_router)
+    from app.api.plugins import router as plugins_router
+
+    app.include_router(plugins_router)
     for r in extra_routers or []:
         app.include_router(r)
 

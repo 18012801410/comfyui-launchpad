@@ -1,0 +1,54 @@
+/* 设计 Token（docs/DESIGN_SYSTEM.md）——亮暗双主题，:root 亮色，.dark 暗色 */
+:root {
+  --lp-primary: #7c5cfc;
+  --lp-primary-weak: #f0edff;
+  --lp-bg: #f6f7fb;
+  --lp-surface: #ffffff;
+  --lp-text: #1f2330;
+  --lp-text-2: #5a6172;
+  --lp-border: #e4e7ef;
+  --lp-success: #30a46c;
+  --lp-warning: #f5a524;
+  --lp-danger: #e5484d;
+  --lp-link: #4a6cf7;
+}
+
+.dark {
+  --lp-primary: #9d86ff;
+  --lp-primary-weak: #2a2550;
+  --lp-bg: #12141c;
+  --lp-surface: #1b1e2a;
+  --lp-text: #e8eaf2;
+  --lp-text-2: #9aa1b5;
+  --lp-border: #2a2f3e;
+  --lp-success: #3dd68c;
+  --lp-warning: #ffb224;
+  --lp-danger: #ff6369;
+  --lp-link: #7c9bff;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+
+.mono {
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.log-line-error {
+  color: var(--lp-danger);
+}
+
+.log-line-warn {
+  color: var(--lp-warning);
+}

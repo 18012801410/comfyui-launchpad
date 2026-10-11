@@ -3,6 +3,7 @@
 # 用法: bash install.sh
 # 环境变量:
 #   LAUNCHPAD_CHANNEL   面板发行渠道基址（默认官方仓库 Releases）
+#   LAUNCHPAD_SOURCE    源码直装模式：指向仓库目录（需含 frontend/dist），跳过下载
 #   LAUNCHPAD_PORT      面板端口（默认 6006，被占用自动顺延 6008/6010/6012）
 #   LAUNCHPAD_NO_AUTOSTART=1   跳过写入 ~/.bashrc 自启片段
 #   LAUNCHPAD_RESET=1   重装时重置令牌与配置
@@ -54,31 +55,46 @@ PANEL_PORT="$TRY_PORT"
 mkdir -p "$LAUNCHPAD_DIR/releases" "$DATA_DIR"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-log "下载面板发行包…"
-PKG_URL="$CHANNEL/latest/download/launchpad.tar.zst"
-if command -v curl >/dev/null; then
-  # 加速可开可关：失败自动降级直连
-  if [ -f /etc/network_turbo ]; then
-    # shellcheck disable=SC1091
-    source /etc/network_turbo || true
-  fi
-  curl -fL --retry 2 --connect-timeout 15 -o "$WORK/launchpad.tar.zst" "$PKG_URL" \
-    || { unset http_proxy https_proxy all_proxy; curl -fL --retry 1 --connect-timeout 15 -o "$WORK/launchpad.tar.zst" "$PKG_URL"; }
-else
-  fail "未找到 curl"
-fi
 
 NEW_DIR="$WORK/panel"
 mkdir -p "$NEW_DIR"
-tar --zstd -xf "$WORK/launchpad.tar.zst" -C "$NEW_DIR" --strip-components=1
-[ -f "$NEW_DIR/backend/app/main.py" ] || fail "发行包结构异常（缺少 backend/app/main.py）"
 
-VERSION=$("$PYTHON_BIN" -c "import json,sys;print(json.load(open('$NEW_DIR/version.json'))['version'])" 2>/dev/null \
-  || echo "$(date +%Y%m%d%H%M)")
+if [ -n "${LAUNCHPAD_SOURCE:-}" ]; then
+  # ---------- 2a. 源码直装模式：LAUNCHPAD_SOURCE 指向仓库目录（需先在本地 npm run build 出 frontend/dist） ----------
+  log "源码直装模式：$LAUNCHPAD_SOURCE"
+  [ -f "$LAUNCHPAD_SOURCE/backend/app/main.py" ] || fail "源码目录结构异常（缺少 backend/app/main.py）"
+  [ -d "$LAUNCHPAD_SOURCE/frontend/dist" ] || fail "缺少 frontend/dist —— 请先在开发机执行 cd frontend && npm run build，再连同 dist 一起上传"
+  cp -r "$LAUNCHPAD_SOURCE/." "$NEW_DIR/"
+  rm -rf "$NEW_DIR/backend/.venv" "$NEW_DIR/backend/__pycache__" "$NEW_DIR/.git"
+  VERSION="dev-$(date +%Y%m%d%H%M)"
+else
+  # ---------- 2b. 发行包模式（默认）：从 GitHub Releases 下载 ----------
+  log "下载面板发行包…"
+  PKG_URL="$CHANNEL/latest/download/launchpad.tar.zst"
+  if command -v curl >/dev/null; then
+    # 加速可开可关：失败自动降级直连
+    if [ -f /etc/network_turbo ]; then
+      # shellcheck disable=SC1091
+      source /etc/network_turbo || true
+    fi
+    curl -fL --retry 2 --connect-timeout 15 -o "$WORK/launchpad.tar.zst" "$PKG_URL" \
+      || { unset http_proxy https_proxy all_proxy; curl -fL --retry 1 --connect-timeout 15 -o "$WORK/launchpad.tar.zst" "$PKG_URL"; }
+  else
+    fail "未找到 curl"
+  fi
+  tar --zstd -xf "$WORK/launchpad.tar.zst" -C "$NEW_DIR" --strip-components=1
+  VERSION=$("$PYTHON_BIN" -c "import json,sys;print(json.load(open('$NEW_DIR/version.json'))['version'])" 2>/dev/null \
+    || echo "$(date +%Y%m%d%H%M)")
+fi
+
+[ -f "$NEW_DIR/backend/app/main.py" ] || fail "面板内容异常（缺少 backend/app/main.py）"
+
 TARGET="$LAUNCHPAD_DIR/releases/$VERSION"
 rm -rf "$TARGET"
 mkdir -p "$TARGET"
 cp -r "$NEW_DIR/." "$TARGET/"
+# 源码模式补一个 version.json（自升级比较版本用）
+[ -f "$TARGET/version.json" ] || printf '{"version": "%s"}\n' "$VERSION" > "$TARGET/version.json"
 ln -sfn "$TARGET" "$LAUNCHPAD_DIR/current"
 # supervisor.sh 固定在面板根目录（自升级 switch 接口依赖该路径）
 cp "$TARGET/scripts/supervisor.sh" "$LAUNCHPAD_DIR/supervisor.sh"

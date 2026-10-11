@@ -1,0 +1,29 @@
+{
+  "$schema_note": "versions-index.json —— ComfyUI 版本渠道索引（schema 权威）。发布位置：渠道仓库 Releases 的 latest/download/versions-index.json；面板以 settings.channels.versions + '/latest/download/versions-index.json' 拉取。",
+  "channel": "launchpad-versions",
+  "updated_at": "2026-10-11T00:00:00Z",
+  "versions": [
+    {
+      "version": "0.39.0",
+      "release_date": "2026-09-30",
+      "torch_baseline": "2.4.0",
+      "min_python": "3.10",
+      "size_mb": 4200,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "url": "https://github.com/REPLACE_ME/launchpad-versions/releases/latest/download/comfyui-0.39.0.tar.zst",
+      "notes": "示例条目：自包含版本包（源码+venv，torch 复用镜像环境）",
+      "deprecated": false
+    },
+    {
+      "version": "0.38.0",
+      "release_date": "2026-09-01",
+      "torch_baseline": "2.4.0",
+      "min_python": "3.10",
+      "size_mb": 4100,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "url": "https://github.com/REPLACE_ME/launchpad-versions/releases/latest/download/comfyui-0.38.0.tar.zst",
+      "notes": "示例条目",
+      "deprecated": true
+    }
+  ]
+}

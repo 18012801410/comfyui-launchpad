@@ -55,6 +55,24 @@ def create_app(
     app.state.supervisor = ProcessSupervisor(layout, events=app.state.events)
     app.state.sysinfo = SysinfoCollector(layout)
     app.state.launch_store = LaunchConfigStore(layout.state_dir / "launch-config.json")
+    app.state.install_tasks = {}
+
+    def _is_comfy_running() -> bool:
+        return app.state.supervisor.state.value not in ("stopped", "failed")
+
+    def _versions_channel_base() -> str:
+        store: SettingsStore = app.state.settings_store
+        settings = store.load()
+        return settings.channels.versions if settings else DEFAULT_VERSIONS_CHANNEL
+
+    from app.domain.version_manager import DEFAULT_VERSIONS_CHANNEL, VersionManager
+
+    app.state.version_manager = VersionManager(
+        layout,
+        events=app.state.events,
+        is_running=_is_comfy_running,
+        channel_provider=_versions_channel_base,
+    )
     if sse_heartbeat is not None:
         app.state.sse_heartbeat = sse_heartbeat
 
@@ -64,6 +82,9 @@ def create_app(
     app.include_router(comfy_router)
     app.include_router(system_router)
     app.include_router(sse_router)
+    from app.api.versions import router as versions_router
+
+    app.include_router(versions_router)
     for r in extra_routers or []:
         app.include_router(r)
 

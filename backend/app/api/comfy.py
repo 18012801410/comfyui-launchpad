@@ -16,7 +16,7 @@ from app.api.errors import AppError
 from app.core.config import PanelSettings
 from app.domain.launch_config import LaunchConfig, LaunchConfigStore, Preset
 from app.domain.process_supervisor import ProcessSupervisor, tcp_probe
-from app.domain.version_manager import python_exe_for, resolve_current
+from app.domain.version_manager import python_exe_for, resolve_current_dir
 
 router = APIRouter(prefix="/api/comfy")
 
@@ -51,10 +51,11 @@ async def start(request: Request, settings: SettingsDep) -> dict[str, object]:
             status=409,
         )
 
-    current = resolve_current(request.app.state.layout)
-    if current is None:
+    current_dir = resolve_current_dir(request.app.state.layout)
+    if current_dir is None:
         raise AppError("version_not_installed", "尚未安装任何 ComfyUI 版本", status=404)
-    version_dir, version_name = current
+    version_dir = current_dir
+    version_name = current_dir.name
 
     args = config.build_cli_args(panel_port=settings.panel_port)
     cmd = [str(python_exe_for(version_dir)), "main.py", *args]
@@ -72,10 +73,11 @@ async def stop(request: Request, _s: SettingsDep) -> dict[str, object]:
 async def restart(request: Request, settings: SettingsDep) -> dict[str, object]:
     sup = _supervisor(request)
     config = _launch_store(request).load()
-    current = resolve_current(request.app.state.layout)
-    if current is None:
+    current_dir = resolve_current_dir(request.app.state.layout)
+    if current_dir is None:
         raise AppError("version_not_installed", "尚未安装任何 ComfyUI 版本", status=404)
-    version_dir, version_name = current
+    version_dir = current_dir
+    version_name = current_dir.name
     args = config.build_cli_args(panel_port=settings.panel_port)
     cmd = [str(python_exe_for(version_dir)), "main.py", *args]
     snap = await sup.restart(cmd=cmd, workdir=version_dir, version=version_name)

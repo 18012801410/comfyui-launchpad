@@ -379,7 +379,7 @@ class VersionManager:
             raw = read_json_with_backup(self._state_path)
         except Exception:  # noqa: BLE001
             return
-        installed = raw.get("installed", {})
+        installed: dict[str, Any] = dict(raw.get("installed", {}))
         installed.pop(version, None)
         write_json_atomic(self._state_path, {"installed": installed})
 

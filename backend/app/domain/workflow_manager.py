@@ -185,6 +185,35 @@ class WorkflowManager:
         )
         self._registry_path = layout.state_dir / "workflows-registry.json"
         self._library_cache_path = layout.state_dir / "workflows-library-cache.json"
+        # 工作流保存到 ComfyUI 用户目录侧（共享布局 user/default/workflows），
+        # 使导入的工作流直接出现在 ComfyUI 界面的「工作流」侧边栏
+        self._wf_dir = layout.shared_user / "default" / "workflows"
+        self._legacy_dir = layout.shared_workflows
+        self._migrate_legacy_files()
+
+    def _migrate_legacy_files(self) -> None:
+        """一次性迁移：旧目录 shared/workflows 中的已登记文件移到新目录。"""
+        if not self._legacy_dir.is_dir() or not self._registry_path.exists():
+            return
+        try:
+            raw: dict[str, Any] = read_json_with_backup(self._registry_path)
+            items: list[Any] = list(raw.get("items", []))
+        except Exception:  # noqa: BLE001
+            return
+        self._wf_dir.mkdir(parents=True, exist_ok=True)
+        changed = False
+        for item in items:
+            fp = item.get("file_path")
+            if not fp:
+                continue
+            old = self._legacy_dir / fp
+            new = self._wf_dir / fp
+            if old.is_file() and not new.exists():
+                new.parent.mkdir(parents=True, exist_ok=True)
+                old.rename(new)
+                changed = True
+        if changed:
+            write_json_atomic(self._registry_path, {"items": items})
 
     # ---------- 官方库 ----------
 
@@ -245,7 +274,7 @@ class WorkflowManager:
 
         accel_env = await asyncio_to_thread(build_accel_env, accel_enabled)
         filename = f"{sanitize_filename(slug)}.json"
-        dest = self._layout.shared_workflows / filename
+        dest = self._wf_dir / filename
         await download_file(
             entry.file_url,
             dest_dir=dest.parent,
@@ -298,7 +327,7 @@ class WorkflowManager:
              or (library_slug is None and i.name == name and i.source == "upload")),
             None,
         )
-        dest = self._layout.shared_workflows / filename
+        dest = self._wf_dir / filename
         dest.parent.mkdir(parents=True, exist_ok=True)
 
         if existing is not None:
@@ -330,10 +359,10 @@ class WorkflowManager:
         if item is None:
             raise AppError("invalid_workflow", f"工作流不存在: {workflow_id}", status=404)
         # 白名单内才删文件
-        target = self._layout.shared_workflows / item.file_path
+        target = self._wf_dir / item.file_path
         try:
             resolved = target.resolve()
-            in_whitelist = resolved.is_relative_to(self._layout.shared_workflows.resolve())
+            in_whitelist = resolved.is_relative_to(self._wf_dir.resolve())
             if in_whitelist and resolved.is_file():
                 resolved.unlink()
         except OSError:
@@ -342,7 +371,7 @@ class WorkflowManager:
         self._save_registry(items)
 
     def _backup_old(self, file_path: str) -> None:
-        old = self._layout.shared_workflows / file_path
+        old = self._wf_dir / file_path
         if not old.is_file():
             return
         history_dir = self._layout.workflow_history / Path(file_path).stem

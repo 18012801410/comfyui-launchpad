@@ -38,6 +38,19 @@ def status(request: Request, _s: SettingsDep) -> dict[str, object]:
     return ok(_supervisor(request).snapshot().to_dict())
 
 
+def _child_env(request: Request, config: LaunchConfig) -> dict[str, str]:
+    """ComfyUI 子进程环境增强（镜像原启动脚本携带、面板接管后需补齐的项）。"""
+    layout = request.app.state.layout
+    return {
+        # 国内 HF 镜像（按仓库名加载模型的工作流依赖此项，如 Qwen3-TTS）
+        "HF_ENDPOINT": "https://hf-mirror.com",
+        # HF 缓存落数据盘：跨重启持久，不占系统盘
+        "HF_HOME": str(layout.data_dir / "shared" / "hf-cache"),
+        # OpenBLAS 线程缓冲防御（内存紧张机器上避免初始化崩溃）
+        "OPENBLAS_NUM_THREADS": "8",
+    }
+
+
 @router.post("/start")
 async def start(request: Request, settings: SettingsDep) -> dict[str, object]:
     sup = _supervisor(request)
@@ -60,7 +73,10 @@ async def start(request: Request, settings: SettingsDep) -> dict[str, object]:
 
     args = config.build_cli_args(panel_port=settings.panel_port)
     cmd = [str(python_exe_for(version_dir)), "main.py", *args]
-    snap = await sup.start(cmd=cmd, workdir=version_dir, version=version_name)
+    snap = await sup.start(
+        cmd=cmd, workdir=version_dir, version=version_name,
+        env=_child_env(request, config),
+    )
     return ok(snap.to_dict())
 
 
@@ -81,7 +97,10 @@ async def restart(request: Request, settings: SettingsDep) -> dict[str, object]:
     version_name = resolve_current_version(request.app.state.layout) or current_dir.name
     args = config.build_cli_args(panel_port=settings.panel_port)
     cmd = [str(python_exe_for(version_dir)), "main.py", *args]
-    snap = await sup.restart(cmd=cmd, workdir=version_dir, version=version_name)
+    snap = await sup.restart(
+        cmd=cmd, workdir=version_dir, version=version_name,
+        env=_child_env(request, config),
+    )
     return ok(snap.to_dict())
 
 

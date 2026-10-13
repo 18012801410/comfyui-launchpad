@@ -117,10 +117,14 @@ async def download_file(
     try:
         return await _run(_new_client(proxy, timeout))
     except httpx.HTTPError as exc:
-        if not _is_cert_error(exc):
-            raise
-        # 证书被劫持（直连被墙）：降级非校验重试一次
-        return await _run(_new_client(proxy, timeout, insecure=True))
+        _cleanup_part(part_path)
+        if _is_cert_error(exc):
+            # 证书被劫持（直连被墙）：降级非校验重试一次
+            return await _run(_new_client(proxy, timeout, insecure=True))
+        raise _err("download_failed", f"网络错误: {exc}") from exc
+    except AppError:
+        _cleanup_part(part_path)
+        raise
 
 
 async def _download_with_client(
@@ -176,10 +180,8 @@ async def _download_with_client(
                 )
         os.replace(part_path, final_path)
         return final_path
-    except httpx.HTTPError as exc:
-        _cleanup_part(part_path)
-        raise _err("download_failed", f"网络错误: {exc}") from exc
-    except AppError:
+    except BaseException:
+        # httpx 错误裸抛给外层（证书降级重试）；AppError 也由外层清理后透传
         _cleanup_part(part_path)
         raise
     finally:
@@ -240,7 +242,8 @@ async def fetch_json(
             return await _fetch_json_once(cl, url)
     except httpx.HTTPError as exc:
         if not _is_cert_error(exc):
-            raise
+            raise _err("download_failed", f"网络错误: {exc}") from exc
+        # 证书被劫持：降级非校验重试一次
         async with _new_client(
             proxy, httpx.Timeout(timeout_s), insecure=True
         ) as cl:
@@ -248,13 +251,10 @@ async def fetch_json(
 
 
 async def _fetch_json_once(client: httpx.AsyncClient, url: str) -> dict[str, Any]:
-    try:
-        resp = await client.get(url, headers={"Accept": "application/json"})
-        if resp.status_code >= 400:
-            raise _err("download_failed", f"索引拉取失败 HTTP {resp.status_code}: {url}")
-        data = resp.json()
-        if not isinstance(data, dict):
-            raise _err("download_failed", f"索引格式异常（非 JSON 对象）: {url}")
-        return data
-    except httpx.HTTPError as exc:
-        raise _err("download_failed", f"网络错误: {exc}") from exc
+    resp = await client.get(url, headers={"Accept": "application/json"})
+    if resp.status_code >= 400:
+        raise _err("download_failed", f"索引拉取失败 HTTP {resp.status_code}: {url}")
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise _err("download_failed", f"索引格式异常（非 JSON 对象）: {url}")
+    return data

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
@@ -13,6 +14,8 @@ from app.api.envelope import ok
 from app.api.errors import AppError
 from app.core.config import PanelSettings
 from app.domain.version_manager import VersionManager
+
+logger = logging.getLogger("launchpad.versions")
 
 router = APIRouter(prefix="/api/versions")
 
@@ -78,6 +81,11 @@ async def install(version: str, request: Request, settings: SettingsDep) -> obje
 
     def _cleanup(t: asyncio.Task[object]) -> None:
         request.app.state.install_tasks.pop(version, None)
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.error("版本 %s 安装任务失败: %s", version, exc)
 
     task.add_done_callback(_cleanup)
     return JSONResponse(status_code=202, content=ok({"task": f"install:{version}"}))

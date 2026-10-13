@@ -16,6 +16,12 @@ const theme = useThemeStore();
 
 const settings = ref<PanelSettingsData | null>(null);
 const loading = ref(true);
+const channelsForm = ref<{ versions: string; workflows: string; self: string }>({
+  versions: "",
+  workflows: "",
+  self: "",
+});
+const channelsSaved = ref(false);
 
 // 面板更新
 const updateInfo = ref<PanelUpdateInfo | null>(null);
@@ -30,8 +36,28 @@ const logLevel = ref<"INFO" | "WARNING" | "ERROR">("INFO");
 async function load(): Promise<void> {
   try {
     settings.value = await api.panelSettings();
+    if (settings.value) {
+      channelsForm.value = {
+        versions: settings.value.channels.versions,
+        workflows: settings.value.channels.workflows,
+        self: settings.value.channels.self,
+      };
+    }
   } finally {
     loading.value = false;
+  }
+}
+
+async function saveChannels(): Promise<void> {
+  if (!settings.value) return;
+  try {
+    const saved = await api.savePanelSettings({ channels: { ...channelsForm.value } });
+    settings.value = saved;
+    channelsSaved.value = true;
+    message.success("渠道已保存");
+    await checkUpdate();
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : "保存失败");
   }
 }
 
@@ -227,6 +253,28 @@ const themeOptions: { label: string; value: ThemeChoice }[] = [
             {{ phaseLabel[updatePhase] }}
             <span v-if="updatePhase === 'rolled_back'">：{{ updateReason }}</span>
           </n-alert>
+        </n-space>
+      </n-card>
+
+      <!-- 更新渠道 -->
+      <n-card title="更新渠道" size="small">
+        <n-space vertical :size="10">
+          <n-form-item label="面板更新渠道（self）" label-placement="left" :show-feedback="false">
+            <n-input v-model:value="channelsForm.self" placeholder="https://github.com/你的仓库/releases" class="mono" />
+          </n-form-item>
+          <n-form-item label="ComfyUI 版本渠道（versions）" label-placement="left" :show-feedback="false">
+            <n-input v-model:value="channelsForm.versions" placeholder="https://github.com/你的版本仓库/releases" class="mono" />
+          </n-form-item>
+          <n-form-item label="工作流库渠道（workflows）" label-placement="left" :show-feedback="false">
+            <n-input v-model:value="channelsForm.workflows" placeholder="https://github.com/你的工作流仓库/releases" class="mono" />
+          </n-form-item>
+          <n-text depth="3" style="font-size: 12px">
+            渠道基址指向 GitHub 仓库的 Releases 页；面板自动按「基址/latest/download/索引文件」拉取。
+            含 REPLACE_ME 说明渠道尚未配置。
+          </n-text>
+          <n-space justify="end">
+            <n-button type="primary" @click="saveChannels">保存渠道</n-button>
+          </n-space>
         </n-space>
       </n-card>
 

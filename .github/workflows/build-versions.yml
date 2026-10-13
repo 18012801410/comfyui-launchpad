@@ -38,7 +38,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zstd
       - name: Build package
         env:
-          PYTHON_ABI: "3.11"
+          PYTHON_ABI: "3.12"
           TORCH_BASELINE: ${{ inputs.torch_baseline }}
         run: bash packaging/build_comfy_version.sh "${{ matrix.version }}" "${{ inputs.torch_baseline }}"
       - uses: actions/upload-artifact@v4

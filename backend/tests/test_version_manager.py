@@ -122,6 +122,48 @@ async def test_refresh_and_overview(manager: VersionManager) -> None:
     assert index is not None and cached_at and stale is False
 
 
+async def test_install_from_split_parts(layout, tmp_path: Path, static_server_full) -> None:
+    """分卷包：下载各分卷 → 拼接 → 合并校验 → 正常安装。"""
+    base, serve_dir = static_server_full
+    # 先做一个“大”包（真实 tar.zst），切成两个分卷
+    pkg_src = tmp_path / "pkg-src"
+    pkg_src.mkdir(parents=True)
+    (pkg_src / "main.py").write_text("# split test\n", encoding="utf-8")
+    big = tmp_path / "big.tar.zst"
+    # 填充到 ~3MB 保证切两卷（测试用小分卷阈值→直接手工切 1.5MB）
+    (pkg_src / "fill.bin").write_bytes(b"z" * (3 * 1024 * 1024))
+    from app.domain.version_manager import make_tar_zst as _mk
+    _mk(pkg_src, big)
+
+    import json as _json
+    import hashlib as _hashlib
+    part1 = serve_dir / "comfyui-9.9.9.tar.zst.part00"
+    part2 = serve_dir / "comfyui-9.9.9.tar.zst.part01"
+    payload = big.read_bytes()
+    half = len(payload) // 2
+    part1.write_bytes(payload[:half])
+    part2.write_bytes(payload[half:])
+    combined_sha = hashlib.sha256(payload).hexdigest()
+
+    latest = serve_dir / "latest" / "download"
+    latest.mkdir(parents=True, exist_ok=True)
+    index = {"channel": "test", "updated_at": "x", "versions": [{
+        "version": "9.9.9", "sha256": combined_sha,
+        "url": f"{base}/comfyui-9.9.9.tar.zst",
+        "parts": ["comfyui-9.9.9.tar.zst.part00", "comfyui-9.9.9.tar.zst.part01"],
+        "size_mb": len(payload) // (1024 * 1024) + 1,
+    }]}
+    (latest / "versions-index.json").write_text(_json.dumps(index), encoding="utf-8")
+
+    mgr = VersionManager(layout, channel_provider=lambda: base)
+    await mgr.refresh_index()
+    info = await mgr.install("9.9.9")
+    assert info.status == "ready"
+    assert (layout.versions_dir / "9.9.9" / "main.py").is_file()
+    await mgr.switch("9.9.9")
+    assert resolve_current_version(layout) == "9.9.9"
+
+
 async def test_install_switch_delete_flow(
     manager: VersionManager, layout
 ) -> None:

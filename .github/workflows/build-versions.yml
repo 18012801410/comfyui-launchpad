@@ -75,5 +75,6 @@ jobs:
           name: ComfyUI 版本包 ${{ inputs.versions }}
           files: |
             dist/comfyui-*.tar.zst
+            dist/comfyui-*.tar.zst.part*
             dist/versions-index.json
           fail_on_unmatched_files: true

@@ -42,9 +42,25 @@ cp -r "$WORK_DIR/venv" "$PKG_ROOT/venv"
 echo "==> 打包 tar.zst"
 tar --zstd -cf "$DIST_DIR/comfyui-${VERSION_TAG}.tar.zst" -C "$WORK_DIR/pack" "ComfyUI-$VERSION_TAG"
 
+# GitHub Release 单文件上限 2GiB：超限自动切分为 1.9GB 分卷（.part00/.part01/…）
+PKG="$DIST_DIR/comfyui-${VERSION_TAG}.tar.zst"
+if [ "$(stat -c%s "$PKG")" -ge 2147483648 ]; then
+  echo "==> 超 2GiB，切分分卷"
+  split -b 1900M -d -a 2 "$PKG" "${PKG}.part"
+  rm -f "$PKG"
+fi
+
 echo "==> 生成 manifest"
-SHA256=$(sha256sum "$DIST_DIR/comfyui-${VERSION_TAG}.tar.zst" | cut -d' ' -f1)
-SIZE_MB=$(( $(stat -c%s "$DIST_DIR/comfyui-${VERSION_TAG}.tar.zst") / 1024 / 1024 + 1 ))
+SHA256=$(sha256sum "$DIST_DIR/comfyui-${VERSION_TAG}.tar.zst" 2>/dev/null | cut -d' ' -f1)
+SIZE_MB=$(( $(du -cm "$DIST_DIR"/comfyui-${VERSION_TAG}.tar.zst* 2>/dev/null | tail -1 | cut -f1) + 1 ))
+# 分卷清单（未切分时为空数组）
+PARTS_JSON="["
+for f in "$DIST_DIR"/comfyui-${VERSION_TAG}.tar.zst.part*; do
+  [ -e "$f" ] || continue
+  PARTS_JSON="$PARTS\"$(basename "$f")\","
+done
+PARTS_JSON="${PARTS_JSON%,}]"
+[ "$PARTS_JSON" = "]" ] && PARTS_JSON="[]"
 cat > "$DIST_DIR/manifest-${VERSION_TAG}.json" <<EOF
 {
   "version": "${VERSION_TAG}",
@@ -54,6 +70,7 @@ cat > "$DIST_DIR/manifest-${VERSION_TAG}.json" <<EOF
   "python_abi": "${PYTHON_ABI}",
   "size_mb": ${SIZE_MB},
   "sha256": "${SHA256}",
+  "parts": ${PARTS_JSON},
   "url": "https://github.com/\${GITHUB_REPOSITORY:-REPLACE_ME/launchpad-versions}/releases/latest/download/comfyui-${VERSION_TAG}.tar.zst",
   "notes": "torch ${TORCH_BASELINE}（复用镜像环境，ABI ${PYTHON_ABI}）",
   "deprecated": false

@@ -29,7 +29,7 @@ from app.core.errors import AppError
 from app.core.events import EventBus
 from app.core.links import ensure_dir_link, remove_dir_link
 from app.core.paths import MODEL_CATEGORIES, Layout
-from app.infra.downloader import build_accel_env, download_file, fetch_json
+from app.infra.downloader import _sha256_of, build_accel_env, download_file, fetch_json
 
 TOPIC_VERSIONS = "versions"
 TOPIC_DOWNLOADS = "downloads"
@@ -47,6 +47,7 @@ class IndexEntry(BaseModel):
     size_mb: int = 0
     sha256: str = ""
     url: str
+    parts: list[str] = Field(default_factory=list)  # 分卷文件名列表（GitHub 2GiB 上限切分）
     notes: str = ""
     deprecated: bool = False
 
@@ -318,15 +319,55 @@ class VersionManager:
                 on_progress(d)
 
         started = time.monotonic()
-        await download_file(
-            entry.url,
-            dest_dir=layout.staging_dir,
-            filename=staging_pkg.name,
-            expected_sha256=entry.sha256 or None,
-            expected_size=entry.size_mb * 1024 * 1024 or None,
-            accel_env=accel_env,
-            on_progress=progress_cb,
-        )
+        if entry.parts:
+            # 分卷：顺序下载各分卷 → 拼接 → 合并校验 → 解压
+            base_url = entry.url.rsplit("/", 1)[0]
+            part_files: list[Path] = []
+            offset = 0
+            for part_name in entry.parts:
+                part_url = part_name if part_name.startswith("http") else f"{base_url}/{part_name}"
+                part_dest = layout.staging_dir / part_name.rsplit("/", 1)[-1]
+                part_dest.unlink(missing_ok=True)
+                base_offset = offset
+
+                async def part_progress(d: dict[str, Any], _off: int = base_offset) -> None:
+                    merged = {"received": _off + d["received"], "total": _off + d["total"]}
+                    await progress_cb(merged)
+
+                await download_file(
+                    part_url,
+                    dest_dir=layout.staging_dir,
+                    filename=part_dest.name,
+                    accel_env=accel_env,
+                    on_progress=part_progress,
+                )
+                offset += part_dest.stat().st_size
+                part_files.append(part_dest)
+            with staging_pkg.open("wb") as out:
+                for pf in part_files:
+                    with pf.open("rb") as fr:
+                        shutil.copyfileobj(fr, out)
+                    pf.unlink(missing_ok=True)
+            part_files.clear()
+            # 合并结果统一校验（分卷下载器只做单卷完整性，这里校验合并 sha256）
+            if entry.sha256:
+                actual = await asyncio.to_thread(_sha256_of, staging_pkg)
+                if actual != entry.sha256.lower():
+                    staging_pkg.unlink(missing_ok=True)
+                    raise AppError(
+                        "checksum_mismatch",
+                        f"分卷合并后校验和不匹配：期望 {entry.sha256[:12]}…，实际 {actual[:12]}…",
+                    )
+        else:
+            await download_file(
+                entry.url,
+                dest_dir=layout.staging_dir,
+                filename=staging_pkg.name,
+                expected_sha256=entry.sha256 or None,
+                expected_size=entry.size_mb * 1024 * 1024 or None,
+                accel_env=accel_env,
+                on_progress=progress_cb,
+            )
         await loop.run_in_executor(None, safe_extract_tar_zst, staging_pkg, staging_dir)
         staging_pkg.unlink(missing_ok=True)
 

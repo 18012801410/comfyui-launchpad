@@ -63,7 +63,7 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p dist
-          find dist-all -name 'comfyui-*.tar.zst' -exec mv {} dist/ \;
+          find dist-all -name 'comfyui-*.tar.zst*' -exec mv {} dist/ \;
           find dist-all -name 'manifest-*.json' -exec mv {} dist/ \;
       - name: Generate index
         env:

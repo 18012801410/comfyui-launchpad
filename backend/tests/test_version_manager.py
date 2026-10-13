@@ -136,7 +136,6 @@ async def test_install_from_split_parts(layout, tmp_path: Path, static_server_fu
     _mk(pkg_src, big)
 
     import json as _json
-    import hashlib as _hashlib
     part1 = serve_dir / "comfyui-9.9.9.tar.zst.part00"
     part2 = serve_dir / "comfyui-9.9.9.tar.zst.part01"
     payload = big.read_bytes()

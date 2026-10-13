@@ -46,6 +46,7 @@ jobs:
           name: build-${{ matrix.version }}
           path: |
             dist/comfyui-*.tar.zst
+            dist/comfyui-*.tar.zst.part*
             dist/manifest-*.json
 
   release:

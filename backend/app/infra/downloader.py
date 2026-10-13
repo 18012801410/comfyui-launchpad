@@ -96,7 +96,6 @@ async def download_file(
 ) -> Path:
     """下载到 dest_dir/filename（原子落盘 + SHA-256 校验 + 进度回调）。"""
     dest_dir.mkdir(parents=True, exist_ok=True)
-    final_path = dest_dir / filename
     part_path = dest_dir / (filename + ".part")
     if part_path.exists():
         # 断点提示：MVP 不做续传，清理后重下（日志可见提示）
@@ -105,17 +104,39 @@ async def download_file(
     await _verify_free_space(dest_dir, expected_size)
 
     proxy = accel_httpx_proxy(accel_env)
-    owns_client = client is None
-    if client is None:
-        client = httpx.AsyncClient(
-            trust_env=False,
-            proxy=proxy,
-            timeout=httpx.Timeout(connect=15.0, read=60.0, write=60.0, pool=15.0),
-            follow_redirects=True,
+    timeout = httpx.Timeout(connect=15.0, read=60.0, write=60.0, pool=15.0)
+
+    async def _run(cl: httpx.AsyncClient) -> Path:
+        return await _download_with_client(
+            cl, url, dest_dir, filename, part_path,
+            expected_sha256, expected_size, on_progress,
         )
+
+    if client is not None:
+        return await _run(client)
+    try:
+        return await _run(_new_client(proxy, timeout))
+    except httpx.HTTPError as exc:
+        if not _is_cert_error(exc):
+            raise
+        # 证书被劫持（直连被墙）：降级非校验重试一次
+        return await _run(_new_client(proxy, timeout, insecure=True))
+
+
+async def _download_with_client(
+    client: httpx.AsyncClient,
+    url: str,
+    dest_dir: Path,
+    filename: str,
+    part_path: Path,
+    expected_sha256: str | None,
+    expected_size: int | None,
+    on_progress: ProgressCB | None,
+) -> Path:
     try:
         received = 0
         started = asyncio.get_event_loop().time()
+        final_path = dest_dir / filename
         f = part_path.open("wb")
         try:
             async with client.stream("GET", url) as resp:
@@ -162,13 +183,32 @@ async def download_file(
         _cleanup_part(part_path)
         raise
     finally:
-        if owns_client:
+        with contextlib.suppress(Exception):
             await client.aclose()
 
 
 def _cleanup_part(part_path: Path) -> None:
     with contextlib.suppress(OSError):
         part_path.unlink(missing_ok=True)
+
+
+def _is_cert_error(exc: BaseException) -> bool:
+    """TLS 证书校验失败（国内直连 GitHub 的典型劫持特征）。"""
+    text = str(exc)
+    return "CERTIFICATE_VERIFY_FAILED" in text or "self-signed" in text
+
+
+def _new_client(
+    proxy: str | None, timeout: Any, insecure: bool = False
+) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        trust_env=False,
+        proxy=proxy,
+        timeout=timeout,
+        follow_redirects=True,
+        # insecure: 学术加速/被墙链路的证书劫持降级通道（内容另有 SHA-256 校验兜底）
+        verify=not insecure,
+    )
 
 
 def _sha256_of(path: Path) -> str:
@@ -188,13 +228,26 @@ async def fetch_json(
     timeout_s: float = 20.0,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    """拉取 JSON 索引；失败抛 download_failed，由调用方决定是否降级用缓存。"""
+    """拉取 JSON 索引；失败抛 download_failed，由调用方决定是否降级用缓存。
+
+    证书被劫持（直连被墙）时自动降级非校验重试一次。
+    """
     proxy = accel_httpx_proxy(accel_env)
-    owns_client = client is None
-    if client is None:
-        client = httpx.AsyncClient(
-            trust_env=False, proxy=proxy, follow_redirects=True, timeout=timeout_s
-        )
+    if client is not None:
+        return await _fetch_json_once(client, url)
+    try:
+        async with _new_client(proxy, httpx.Timeout(timeout_s)) as cl:
+            return await _fetch_json_once(cl, url)
+    except httpx.HTTPError as exc:
+        if not _is_cert_error(exc):
+            raise
+        async with _new_client(
+            proxy, httpx.Timeout(timeout_s), insecure=True
+        ) as cl:
+            return await _fetch_json_once(cl, url)
+
+
+async def _fetch_json_once(client: httpx.AsyncClient, url: str) -> dict[str, Any]:
     try:
         resp = await client.get(url, headers={"Accept": "application/json"})
         if resp.status_code >= 400:
@@ -205,6 +258,3 @@ async def fetch_json(
         return data
     except httpx.HTTPError as exc:
         raise _err("download_failed", f"网络错误: {exc}") from exc
-    finally:
-        if owns_client:
-            await client.aclose()

@@ -98,6 +98,9 @@ class SelfUpdater:
     def is_busy(self) -> bool:
         return self._busy
 
+    def current_version(self) -> str:
+        return self._current_version()
+
     async def check_update(self, accel_enabled: bool = False) -> dict[str, Any]:
         accel_env = await asyncio.to_thread(build_accel_env, accel_enabled)
         url = index_url_from_channel(self._channel_provider())

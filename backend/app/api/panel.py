@@ -65,8 +65,30 @@ def put_settings(
 
 @router.get("/update")
 async def check_update(request: Request, settings: SettingsDep) -> dict[str, object]:
+    # 渠道仍是安装占位符（面板尚未发布到 GitHub Releases）时直接说明，不发无效请求
+    channel = _self_channel(request)
+    if "REPLACE_ME" in channel:
+        return ok(
+            {
+                "current_version": request.app.state.self_updater.current_version(),
+                "latest_version": "—",
+                "available": False,
+                "notes": "更新渠道尚未配置：面板正式发布到 GitHub Releases 后，"
+                "在系统设置中把更新渠道改为实际仓库地址即可。",
+                "checking": False,
+                "channel": channel,
+            }
+        )
     updater = request.app.state.self_updater
     return ok(await updater.check_update(accel_enabled=settings.academic_accel_default))
+
+
+def _self_channel(request: Request) -> str:
+    from app.domain.self_updater import DEFAULT_SELF_CHANNEL
+
+    store: SettingsStore = request.app.state.settings_store
+    settings = store.load()
+    return settings.channels.self_channel if settings else DEFAULT_SELF_CHANNEL
 
 
 @router.post("/update")

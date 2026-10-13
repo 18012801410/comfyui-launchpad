@@ -40,6 +40,7 @@
 3. **官方工作流库首批工作流**（用户提供 JSON 后发首个库 Release）
 
 ## 近期变更
+- 2026-10-13：**公共模型对接打通**（用户实例实战）：①依赖检查升级多根扫描（共享布局 + /root/autodl-tmp/models + /root/autodl-fs/models + 镜像自带 /root/ComfyUI/models，60s TTL 缓存）；②实例上 13 个缺失模型全部从 AutoDL 公共模型库（6188 条，需登录）软链到 /root/autodl-tmp/models/<分类>/（路径与 extra_model_paths.yaml 对齐），4 个已上传工作流缺模型清零；③发现并记录：公共模型库条目自带实例路径（/.autodl/...），实例内可直接 ln -s；模型仓库 ComiCanvas 的条目描述即面板依赖清单。注：/root/ComfyUI/user/default/workflows/launchpad 软链指向面板工作流目录（侧边栏可见）。
 - 2026-10-11（夜）：**公网 WS 重连循环根因修复**——三连击：①实例 websockets≥14 的 connect 参数改名（extra_headers→additional_headers），按版本自适应传参；②网关代理改写 Origin/Referer 为后端视角（ComfyUI 防 DNS 重绑定校验曾导致浏览器经网关访问全部 403 = 白屏元凶）；③uvicorn 关闭 WS PING（AutoDL 网关不转发控制帧时 30s 循环断开的防御）。实测 35 秒观察窗口 403 零新增、页面无重连。另：ComfyUI 日志落盘已在真实故障中立功。镜像适配经验：此类镜像开机自启 ComfyUI 占 6006（start-comfyui.sh），面板接管方式=改写该脚本+补 /etc/autodl.sh 双钩子。
 - 2026-10-11（深夜）：**鉴权网关提前落地**（原二期方案，被真机使用场景逼出）：面板域名下 `根路径` 反向代理 ComfyUI（HTTP 流式 + WebSocket 双向泵），面板自身收缩到 `/panel/*`（API=/panel/api、SPA=/panel）；「打开 ComfyUI」打开 `/` 即 ComfyUI 界面，公网直用。顺带修复重装双进程 bug（install.sh 端口探测前先停旧面板）。公网实测：/ → ComfyUI UI、/system_stats、/panel/、/panel/api/versions（令牌）全部通过。
 - 2026-10-11（深夜）：**首次真实 AutoDL 实例部署成功**（用户实例 westd.seetacloud，ComfyUI 应用镜像）。关键经验：①这类镜像开机自启 ComfyUI 占 6006（经 /root/start-comfyui.sh，源自镜像）；②面板接管方式=改写该脚本+补 /etc/autodl.sh 双钩子拉起面板，原件备份 .orig；③公网映射只有 6006→8443 一条（环境变量 AutoDLService6006URL 可查），面板占 6006 后 ComfyUI UI 外部访问暂需 SSH 隧道（鉴权网关为二期正解）；④miniconda Python 无 python3 命令，部署需 PYTHON_BIN 显式指定；⑤deploy_autodl.sh 已就绪（密码登录场景暂需手动/paramiko，可后续加 sshpass 支持）

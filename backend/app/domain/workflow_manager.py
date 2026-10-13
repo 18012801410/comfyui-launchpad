@@ -120,8 +120,43 @@ def validate_workflow_json(text: str) -> dict[str, Any]:
     )
 
 
-def parse_dependencies(data: dict[str, Any], layout: Layout) -> list[DependencyReportItem]:
-    """提取 JSON 中引用的模型文件名并对照共享模型目录。"""
+_SCAN_CACHE: dict[tuple[str, ...], tuple[float, dict[str, str]]] = {}
+_SCAN_TTL_S = 60.0
+
+
+def _present_index(roots: list[Path]) -> dict[str, str]:
+    """多根目录的 文件名 → 分类 索引（60 秒缓存）。"""
+    import time as _time
+
+    key = tuple(str(r) for r in roots)
+    now = _time.monotonic()
+    cached = _SCAN_CACHE.get(key)
+    if cached and now - cached[0] < _SCAN_TTL_S:
+        return cached[1]
+    present: dict[str, str] = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for cat_dir in root.iterdir():
+            if not cat_dir.is_dir():
+                continue
+            for f in cat_dir.rglob("*"):
+                if f.is_file():
+                    present.setdefault(f.name, cat_dir.name)
+    _SCAN_CACHE[key] = (now, present)
+    return present
+
+
+def parse_dependencies(
+    data: dict[str, Any],
+    layout: Layout,
+    extra_model_roots: list[Path] | None = None,
+) -> list[DependencyReportItem]:
+    """提取 JSON 中引用的模型文件名并对照全部模型根目录。
+
+    扫描范围 = 面板共享布局 + extra_model_roots（数据盘公共模型/网盘/镜像自带），
+    与 extra_model_paths.yaml 声明的 ComfyUI 可见范围保持一致。
+    """
     found: dict[str, str] = {}  # basename -> category（首个提示优先）
 
     def walk(node: Any) -> None:
@@ -147,16 +182,9 @@ def parse_dependencies(data: dict[str, Any], layout: Layout) -> list[DependencyR
 
     walk(data)
 
-    # 一遍扫描共享模型目录建立 文件名 → 类别 索引
-    present_map: dict[str, str] = {}
-    models_root = layout.shared_models
-    if models_root.is_dir():
-        for cat_dir in models_root.iterdir():
-            if not cat_dir.is_dir():
-                continue
-            for f in cat_dir.rglob("*"):
-                if f.is_file():
-                    present_map.setdefault(f.name, cat_dir.name)
+    # 扫描全部模型根目录建立 文件名 → 类别 索引（TTL 缓存，避免大目录反复遍历）
+    roots = [layout.shared_models] + [Path(r) for r in (extra_model_roots or [])]
+    present_map: dict[str, str] = _present_index(roots)
 
     items: list[DependencyReportItem] = []
     for basename, hinted_cat in sorted(found.items()):
@@ -190,6 +218,22 @@ class WorkflowManager:
         self._wf_dir = layout.shared_user / "default" / "workflows"
         self._legacy_dir = layout.shared_workflows
         self._migrate_legacy_files()
+
+    def _model_roots(self) -> list[Path]:
+        """ComfyUI 实际可见的全部模型根目录（与 extra_model_paths.yaml 对齐）。"""
+        import sys as _sys
+
+        roots = [self._layout.shared_models]
+        if _sys.platform != "win32":
+            roots.extend(
+                Path(p)
+                for p in (
+                    "/root/autodl-tmp/models",
+                    "/root/autodl-fs/models",
+                    "/root/ComfyUI/models",
+                )
+            )
+        return roots
 
     def _migrate_legacy_files(self) -> None:
         """一次性迁移：旧目录 shared/workflows 中的已登记文件移到新目录。"""
@@ -319,7 +363,7 @@ class WorkflowManager:
         preview_url: str,
     ) -> WorkflowItem:
         data = validate_workflow_json(text)
-        deps = parse_dependencies(data, self._layout)
+        deps = parse_dependencies(data, self._layout, self._model_roots())
 
         items = self.list_items()
         existing = next(

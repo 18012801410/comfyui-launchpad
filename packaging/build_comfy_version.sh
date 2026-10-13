@@ -51,16 +51,23 @@ if [ "$(stat -c%s "$PKG")" -ge 2147483648 ]; then
 fi
 
 echo "==> 生成 manifest"
-SHA256=$(sha256sum "$DIST_DIR/comfyui-${VERSION_TAG}.tar.zst" 2>/dev/null | cut -d' ' -f1)
+# 合并 sha256：未切分=单文件；已切分=分卷按序拼接（等价于原文件）
+if ls "$DIST_DIR"/comfyui-${VERSION_TAG}.tar.zst.part* >/dev/null 2>&1; then
+  SHA256=$(cat "$DIST_DIR"/comfyui-${VERSION_TAG}.tar.zst.part* | sha256sum | cut -d' ' -f1)
+else
+  SHA256=$(sha256sum "$DIST_DIR/comfyui-${VERSION_TAG}.tar.zst" | cut -d' ' -f1)
+fi
 SIZE_MB=$(( $(du -cm "$DIST_DIR"/comfyui-${VERSION_TAG}.tar.zst* 2>/dev/null | tail -1 | cut -f1) + 1 ))
 # 分卷清单（未切分时为空数组）
 PARTS_JSON="["
 for f in "$DIST_DIR"/comfyui-${VERSION_TAG}.tar.zst.part*; do
   [ -e "$f" ] || continue
-  PARTS_JSON="$PARTS\"$(basename "$f")\","
+  PARTS_JSON="${PARTS_JSON}\"$(basename "$f")\","
 done
 PARTS_JSON="${PARTS_JSON%,}]"
-[ "$PARTS_JSON" = "]" ] && PARTS_JSON="[]"
+if [ "$PARTS_JSON" = "]" ]; then
+  PARTS_JSON="[]"
+fi
 cat > "$DIST_DIR/manifest-${VERSION_TAG}.json" <<EOF
 {
   "version": "${VERSION_TAG}",
